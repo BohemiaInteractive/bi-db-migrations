@@ -6,6 +6,7 @@ const fs           = require('fs');
 const _            = require('lodash');
 const Promise      = require('bluebird');
 const childProcess = require('child_process');
+const semver       = require('semver');
 
 const env     = process.env;
 const VERSION = require('../package.json').version;
@@ -135,6 +136,8 @@ function _init(argv) {
 
     if (argv.v > 1) console.info('Project root: ' + ROOT);
 
+    global.verbose = argv.v;
+
     if (typeof ROOT !== 'string') {
         console.error('Failed to find git project root');
         process.exit(1);
@@ -166,7 +169,47 @@ function initSchemaCmd(argv) {
 /**
  *
  */
-function initMigrationCmd() {
+function initMigrationCmd(argv) {
+    let npmPackage, migVersion, tags;
+
+    return _init(argv).then(function() {
+        npmPackage = require(path.resolve(ROOT + '/package.json'));
+        return utils.getGitTagList(ROOT);
+    }).then(function(tagList) {
+        tags = tagList;
+        for (var i = 0, len = tagList.length; i < len; i++) {
+            if (semver.eq(tagList[i], npmPackage.version)) {
+                return 'development';
+            }
+        }
+
+        migVersion = npmPackage.version;
+        return null;
+    }).then(function() {
+        return utils.fetchMigrationTables(MIG_DIR);
+    }).then(function(tables) {
+        let _tables = _.reduce(tables, function(out, val, key) {
+            if (val instanceof Array) {
+                let table = _.clone(val[0]);
+                table.table = key;
+                out.push(table);
+            }
+            return out;
+        }, []);
+
+        return utils.populateMigrationDefinitions(_tables, tags[0], ROOT);
+    }).then(function(tables) {
+        tables.forEach(function(table) {
+            let _seedRequires = utils.getRequiredTables(table.seedData);
+            let _schemaRequires = utils.getRequiredTables(table.schemaData);
+
+            table.requires = _.union(_seedRequires, _schemaRequires);
+            table.seedDataDelta = utils.getNewLines(table.oldSeedData, table.seedData);
+            table.schemaDataDelta = utils.getNewLines(table.oldSchemaData, table.schemaData);
+        });
+        tables = utils.filterAndSortTables(tables);
+        console.log(tables);
+    });
 }
 
 /**
