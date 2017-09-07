@@ -1,19 +1,27 @@
-#!/usr/bin/env node
-
-const yargs        = require('yargs');
 const path         = require('path');
 const fs           = require('fs');
 const _            = require('lodash');
 const Promise      = require('bluebird');
 const childProcess = require('child_process');
 const semver       = require('semver');
+const config       = require('bi-config');
 
 const env     = process.env;
-const VERSION = require('../package.json').version;
+const VERSION = require('./package.json').version;
 const $EDITOR = env.EDITOR;
 
-const utils = require('../lib/util.js');
+const utils = require('./lib/util.js');
 
+var _config = new config.Config;
+_config.initialize();
+
+/*
+ * @param ROOT - project root with initialized git repository
+ */
+var ROOT = null;
+var MIG_DIR = null;
+
+module.exports = cliInterface;
 module.exports.initSeedCmd        = initSeedCmd;
 module.exports.initSchemaCmd      = initSchemaCmd;
 module.exports.initMigrationCmd   = initMigrationCmd;
@@ -21,23 +29,16 @@ module.exports.seedCmd            = seedCmd;
 module.exports.seedAllCmd         = seedAllCmd;
 module.exports.migrateCmd         = migrateCmd;
 module.exports.migrationStatusCmd = migrationStatusCmd;
+module.exports.getConfig          = function() {
+    return _config;
+};
 
-/*
- * @param _yargs - parser definition
- */
-var _yargs = null;
-/*
- * @param ROOT - project root with initialized git repository
- */
-var ROOT = null;
-var MIG_DIR = null;
 
-//run only if this module isn't required by other node module
-if (module.parent === null) {
+function cliInterface(yargs) {
 
-    _yargs = yargs
+    return yargs
     .usage('$0 <command> [options]')
-    .command(['init:seed'], 'Creates a new seed file src/$TABLE/data.sql and opens it with $EDITOR', {
+    .command(['init:seed'], 'Creates a new seed file at $MIG_DIR/src/$TABLE/data.sql and opens it with $EDITOR', {
         table: {
             alias: 't',
             describe: 'table name',
@@ -51,7 +52,7 @@ if (module.parent === null) {
             type: 'string'
         },
     }, initSeedCmd)
-    .command(['init:schema'], 'Creates a new sql schema file src/$TABLE/schema.sql and opens it with $EDITOR', {
+    .command(['init:schema'], 'Creates a new schema file at $MIG_DIR/src/$TABLE/schema.sql and opens it with $EDITOR', {
         table: {
             alias: 't',
             describe: 'table name',
@@ -73,8 +74,14 @@ if (module.parent === null) {
             default: 'sql',
             type: 'string'
         },
+        dialect: {
+            describe: 'SQL provider',
+            choices: ['postgres', 'mysql'],
+            default: _config.get('sequelize:dialect') || 'postgres',
+            type: 'string'
+        },
     }, initMigrationCmd)
-    .command(['status'], 'List the status of migrations', {
+    .command(['mig:status','migration:status'], 'List the status of migrations', {
         limit: {
             alias: 'l',
             describe: 'Lists last n status reports. 0 for all',
@@ -94,8 +101,7 @@ if (module.parent === null) {
     }, seedCmd)
     .command(['seed:all'], 'Run every seeder', {
     }, seedAllCmd)
-    .option('dir', {
-        alias: 'd',
+    .option('mig-dir', {
         describe: 'Base directory path for migrations (relative to project root dir)',
         default: 'migrations',
         global: true,
@@ -116,14 +122,7 @@ if (module.parent === null) {
         global: true,
         type: 'boolean'
     })
-    .version('version', 'Prints bi-service version', VERSION)
-    .strict(true)
-    .help('h', false)
-    .alias('h', 'help')
-    .wrap(yargs.terminalWidth());
-
-    const argv = _yargs.argv;
-
+    .strict(true);
 }
 
 /**
@@ -132,7 +131,7 @@ if (module.parent === null) {
  */
 function _init(argv) {
     ROOT = utils.getNearestRepository();
-    MIG_DIR = path.resolve(ROOT + path.sep + argv.dir);
+    MIG_DIR = path.resolve(ROOT + path.sep + argv['mig-dir']);
 
     if (argv.v > 1) console.info('Project root: ' + ROOT);
 
@@ -143,9 +142,9 @@ function _init(argv) {
         process.exit(1);
     }
 
-    return utils.hasMigrationsStructure(ROOT, argv.dir).then(function(has) {
+    return utils.hasMigrationsStructure(ROOT, argv['mig-dir']).then(function(has) {
         if (!has) {
-            return utils.initFS(ROOT, argv.dir);
+            return utils.initFS(ROOT, argv['mig-dir']);
         }
     });
 }
@@ -170,22 +169,18 @@ function initSchemaCmd(argv) {
  *
  */
 function initMigrationCmd(argv) {
-    let npmPackage, migVersion, tags;
+    let npmPackage, migVersion, latestRelease, tags;
 
     return _init(argv).then(function() {
         npmPackage = require(path.resolve(ROOT + '/package.json'));
+        if (!semver.valid(npmPackage.version)) {
+            throw new Error(`"${npmPackage.version}" is not valid semver version`);
+        }
         return utils.getGitTagList(ROOT);
     }).then(function(tagList) {
         tags = tagList;
-        for (var i = 0, len = tagList.length; i < len; i++) {
-            if (semver.eq(tagList[i], npmPackage.version)) {
-                return 'development';
-            }
-        }
-
-        migVersion = npmPackage.version;
-        return null;
-    }).then(function() {
+        migVersion = ~tags.indexOf(npmPackage.version) ? 'development' : npmPackage.version;
+        latestRelease = utils.getPreviousRelease(npmPackage.version, tags);
         return utils.fetchMigrationTables(MIG_DIR);
     }).then(function(tables) {
         let _tables = _.reduce(tables, function(out, val, key) {
@@ -208,7 +203,25 @@ function initMigrationCmd(argv) {
             table.schemaDataDelta = utils.getNewLines(table.oldSchemaData, table.schemaData);
         });
         tables = utils.filterAndSortTables(tables);
-        console.log(tables);
+
+        if (!tables.length && global.verbose > 1) {
+            console.info('No database changes detected. Creating empty migration file');
+        }
+
+        let promise;
+
+        switch (argv.type) {
+            case 'sql':
+                promise =  utils.createPlainSqlMigration(tables, migVersion, MIG_DIR, argv.dialect);
+                break;
+            default:
+                promise = Promise.resolve();
+                break;
+        }
+
+        return promise.then(function(fPath) {
+            return _openInEditorWhenInteractive(fPath, argv);
+        });
     });
 }
 
@@ -219,9 +232,9 @@ function migrationStatusCmd() {
 }
 
 /**
- *
+ * @param {Object} argv
  */
-function seedCmd() {
+function seedCmd(argv) {
 }
 
 /**
@@ -231,11 +244,29 @@ function seedAllCmd() {
 }
 
 /**
- *
+ * @param {Object} argv
  */
 function migrateCmd() {
+    const sequelize = require('./lib/sequelize.js');
+    const Migrations = sequelize.modelManager.getModel('migrations');
+
+    return utils.fetchMigrationState(Migrations).then(function(version) {
+    });
 }
 
+/**
+ * @param {String} fPath
+ * @return {undefined}
+ */
+function _openInEditorWhenInteractive(fPath, argv) {
+    if (argv.interactive && fPath) {
+        return childProcess.spawn($EDITOR, [
+            fPath,
+        ], {
+            stdio: 'inherit'
+        });
+    }
+}
 
 /**
  * @param {Object} argv
@@ -265,13 +296,6 @@ function _initSeedOrSchema(argv, subject) {
             throw e;
         }
 
-        if (argv.interactive) {
-            return childProcess.spawn($EDITOR, [
-                MIG_DIR + path.sep + fPath,
-            ], {
-                stdio: 'inherit'
-            });
-        }
-
+        return _openInEditorWhenInteractive(MIG_DIR + path.sep + fPath, argv);
     });
 }
