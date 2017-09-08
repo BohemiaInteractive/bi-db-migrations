@@ -5,12 +5,15 @@ const Promise      = require('bluebird');
 const childProcess = require('child_process');
 const semver       = require('semver');
 const config       = require('bi-config');
+const Table        = require('easy-table');
 
 const env     = process.env;
 const VERSION = require('./package.json').version;
 const $EDITOR = env.EDITOR;
 
-const utils = require('./lib/util.js');
+const sqlUtils       = require('./lib/sql.js');
+const utils          = require('./lib/util.js');
+const MigrationError = require('./lib/error/migrationError.js');
 
 var _config = new config.Config;
 _config.initialize();
@@ -85,13 +88,12 @@ function cliInterface(yargs) {
         limit: {
             alias: 'l',
             describe: 'Lists last n status reports. 0 for all',
-            default: 0,
+            default: 2,
             type: 'number'
         },
     }, migrationStatusCmd)
-    .command(['migrate'], 'Run pending migrations', {
-    }, migrateCmd)
-    .command(['seed'], 'Run specified seeder', {
+    .command(['migrate'], 'Run pending migrations', {}, migrateCmd)
+    .command(['seed'], 'Run seeder for specified table', {
         table: {
             alias: 't',
             describe: 'table name',
@@ -99,8 +101,7 @@ function cliInterface(yargs) {
             type: 'string'
         },
     }, seedCmd)
-    .command(['seed:all'], 'Run every seeder', {
-    }, seedAllCmd)
+    .command(['seed:all'], 'Run every seeder', {}, seedAllCmd)
     .option('mig-dir', {
         describe: 'Base directory path for migrations (relative to project root dir)',
         default: 'migrations',
@@ -126,6 +127,9 @@ function cliInterface(yargs) {
 }
 
 /**
+ * make sure we have a project we can interact with and that file system
+ * structure for migrations is in place
+ *
  * @param {Object} argv
  * @return {Promise}
  */
@@ -226,9 +230,30 @@ function initMigrationCmd(argv) {
 }
 
 /**
- *
+ * @param {Object} argv
  */
-function migrationStatusCmd() {
+function migrationStatusCmd(argv) {
+    const sequelize = require('./lib/sequelize.js');
+    const Migrations = sequelize.modelManager.getModel('migrations');
+
+    return Migrations.findAll({
+        order: [['id', 'DESC']],
+        limit: argv.limit
+    }).then(function(migrations) {
+        let t = new Table;
+        migrations.forEach(function(mig) {
+            t.cell('version', mig.version);
+            t.cell('status', mig.status);
+            t.cell('created_at', mig.created_at);
+            t.cell('note', mig.note);
+            t.newRow();
+        });
+        console.info(t.toString());
+        process.exit(0);
+    }).catch(function(err) {
+        console.error(err.message);
+        process.exit(1);
+    });
 }
 
 /**
@@ -238,19 +263,102 @@ function seedCmd(argv) {
 }
 
 /**
- *
+ * @param {Object} argv
  */
-function seedAllCmd() {
+function seedAllCmd(argv) {
+    const sequelize = require('./lib/sequelize.js');
+
+    return _init(argv).then(function() {
+        return utils.fetchMigrationTables(MIG_DIR);
+    }).then(function(tables) {
+        let _tables = _.reduce(tables, function(out, val, key) {
+            if (val instanceof Array) {
+                let table = _.clone(val[0]);
+                table.table = key;
+                out.push(table);
+            }
+            return out;
+        }, []);
+
+        return utils.populateMigrationDefinitions(_tables, null, ROOT);
+    }).then(function(tables) {
+        tables.forEach(function(table) {
+            let _seedRequires = utils.getRequiredTables(table.seedData);
+            let _schemaRequires = utils.getRequiredTables(table.schemaData);
+
+            table.requires = _.union(_seedRequires, _schemaRequires);
+        });
+        tables = utils.filterAndSortTables(tables);
+
+        if (!tables.length) {
+            if (global.verbose > 1) {
+                console.info('Nothing to seed.');
+            }
+            process.exit(0);
+        }
+
+        let sql = '';
+        tables.forEach(function(table) {
+            sql += table.seedData;
+        });
+        sql = sqlUtils[sequelize.options.dialect].main('', sql, Date.now());
+
+        return utils.migratePlainSql.call(sql, sequelize).then(function() {
+            if (argv.verbose) {
+                console.info('Successfully seeded.');
+            }
+            process.exit(0);
+        });
+    });
 }
 
 /**
  * @param {Object} argv
  */
-function migrateCmd() {
+function migrateCmd(argv) {
     const sequelize = require('./lib/sequelize.js');
     const Migrations = sequelize.modelManager.getModel('migrations');
 
-    return utils.fetchMigrationState(Migrations).then(function(version) {
+    return _init(argv).then(function() {
+        return utils.fetchMigrationState(Migrations);
+    }).then(function(version) {
+        let migrations = utils.fetchMigrationScripts(MIG_DIR, version);
+
+        return Promise.each(migrations, function(mig) {
+            let fn;
+
+            switch (mig.type) {
+                case 'sql':
+                    let sql = fs.readFileSync(mig.path);
+                    fn = utils.migratePlainSql.bind(sql.toString());
+                    break;
+                case 'js':
+                    fn = require(mig.path);
+                    break;
+            }
+
+            if (argv.verbose) {
+                console.info(`Initializing ${mig.version} migration...`);
+            }
+
+            return utils.migrate(fn, mig.version, sequelize).then(function() {
+                if (argv.verbose) {
+                    console.info(`${mig.version} migrated successfully.`);
+                }
+            });
+        });
+    }).catch(function(err) {
+        if (err.toJSON) {
+            console.error(err.toJSON());
+        } else {
+            console.error(err);
+        }
+        process.exit(1);
+    }).then(function() {
+        if (argv.verbose) {
+            console.info('All done.');
+            process.exit(0);
+        }
     });
 }
 
