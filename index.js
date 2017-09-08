@@ -219,16 +219,13 @@ function initMigrationCmd(argv) {
             console.info('No database changes detected. Creating empty migration file');
         }
 
-        let promise;
-
-        switch (argv.type) {
-            case 'sql':
-                promise =  utils.createPlainSqlMigration(tables, migVersion, MIG_DIR, argv.dialect);
-                break;
-            default:
-                promise = Promise.resolve();
-                break;
-        }
+        let promise = utils.createPlainSqlMigration(
+            tables,
+            migVersion,
+            MIG_DIR,
+            argv.dialect,
+            argv.type
+        );
 
         return promise.then(function(fPath) {
             return _openInEditorWhenInteractive(fPath, argv);
