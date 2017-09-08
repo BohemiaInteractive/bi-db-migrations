@@ -1,0 +1,13 @@
+DO $$
+    -- Start transaction immediately
+    BEGIN
+    {{#schema}}
+    -- SCHEMA CHANGES
+{{#prettyPrint}}{{{schema}}}{{/prettyPrint}}
+    {{/schema}}
+    {{#seed}}
+    -- DATA CHANGES
+{{#prettyPrint}}{{{seed}}}{{/prettyPrint}}
+    {{/seed}}
+    END
+$$;

@@ -1,0 +1,28 @@
+DELIMITER $$
+DROP PROCEDURE IF EXISTS {{{migName}}} $$
+
+CREATE PROCEDURE {{{migName}}}()
+BEGIN
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+    {{#schema}}
+    -- SCHEMA CHANGES
+    -- DDL is not transactional and causes implicit COMMIT;
+    -- thus must be executed outside of a transaction
+{{#prettyPrint}}{{{schema}}}{{/prettyPrint}}
+    {{/schema}}
+    {{#seed}}
+    -- DATA CHANGES
+    SET autocommit=0;
+    START TRANSACTION;
+{{#prettyPrint}}{{{seed}}}{{/prettyPrint}}
+    COMMIT;
+    {{/seed}}
+END $$
+
+CALL {{{migName}}}() $$
+DROP PROCEDURE IF EXISTS {{{migName}}} $$
+DELIMITER ;

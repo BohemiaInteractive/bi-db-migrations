@@ -11,11 +11,10 @@ const env     = process.env;
 const VERSION = require('./package.json').version;
 const $EDITOR = env.EDITOR;
 
-const sqlUtils       = require('./lib/sql.js');
 const utils          = require('./lib/util.js');
 const MigrationError = require('./lib/error/migrationError.js');
 
-var _config = new config.Config;
+const _config = new config.Config;
 _config.initialize();
 
 /*
@@ -183,7 +182,15 @@ function initMigrationCmd(argv) {
         return utils.getGitTagList(ROOT);
     }).then(function(tagList) {
         tags = tagList;
-        migVersion = ~tags.indexOf(npmPackage.version) ? 'development' : npmPackage.version;
+        migVersion = npmPackage.version;
+        if (~tags.indexOf(npmPackage.version)) {
+            if (semver.prerelease(migVersion).length) {
+                migVersion += '.';
+            } else {
+                migVersion += '-';
+            }
+            migVersion += 'development';
+        }
         latestRelease = utils.getPreviousRelease(npmPackage.version, tags);
         return utils.fetchMigrationTables(MIG_DIR);
     }).then(function(tables) {
@@ -196,7 +203,7 @@ function initMigrationCmd(argv) {
             return out;
         }, []);
 
-        return utils.populateMigrationDefinitions(_tables, tags[0], ROOT);
+        return utils.populateMigrationDefinitions(_tables, latestRelease, ROOT);
     }).then(function(tables) {
         tables.forEach(function(table) {
             let _seedRequires = utils.getRequiredTables(table.seedData);
@@ -287,11 +294,12 @@ function seedAllCmd(argv) {
             let _schemaRequires = utils.getRequiredTables(table.schemaData);
 
             table.requires = _.union(_seedRequires, _schemaRequires);
+            table.seedDataDelta = table.seedData;
         });
         tables = utils.filterAndSortTables(tables);
 
         if (!tables.length) {
-            if (global.verbose > 1) {
+            if (global.verbose) {
                 console.info('Nothing to seed.');
             }
             process.exit(0);
@@ -301,7 +309,18 @@ function seedAllCmd(argv) {
         tables.forEach(function(table) {
             sql += table.seedData;
         });
-        sql = sqlUtils[sequelize.options.dialect].main('', sql, Date.now());
+        //sql = sqlUtils[].main('', sql, Date.now());
+        sql = utils.renderTemplate(sequelize.options.dialect, {
+            seed: sql,
+            migName: 'seeder_' + Date.now()
+        });
+
+        if (argv.verbose) {
+            console.info('Seeding...');
+        }
+        if (argv.verbose > 2) {
+            console.info(sql);
+        }
 
         return utils.migratePlainSql.call(sql, sequelize).then(function() {
             if (argv.verbose) {
@@ -309,6 +328,9 @@ function seedAllCmd(argv) {
             }
             process.exit(0);
         });
+    }).catch(function(err) {
+        console.error(err.message);
+        process.exit(1);
     });
 }
 
