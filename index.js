@@ -184,7 +184,7 @@ function initMigrationCmd(argv) {
         tags = tagList;
         migVersion = npmPackage.version;
         if (~tags.indexOf(npmPackage.version)) {
-            if (semver.prerelease(migVersion).length) {
+            if (semver.prerelease(migVersion)) {
                 migVersion += '.';
             } else {
                 migVersion += '-';
