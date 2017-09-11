@@ -134,7 +134,6 @@ function cliInterface(yargs) {
  */
 function _init(argv) {
     ROOT = utils.getNearestRepository();
-    MIG_DIR = path.resolve(ROOT + path.sep + argv['mig-dir']);
 
     if (argv.v > 1) console.info('Project root: ' + ROOT);
 
@@ -145,11 +144,27 @@ function _init(argv) {
         process.exit(1);
     }
 
-    return utils.hasMigrationsStructure(ROOT, argv['mig-dir']).then(function(has) {
+    return _inspectDir(argv, ROOT).then(function(has) {
         if (!has) {
             return utils.initFS(ROOT, argv['mig-dir']);
         }
-    });
+    })
+}
+
+
+/**
+ * @param {Object} argv
+ * @param {String} projectRoot
+ *
+ * @return {Promise}
+ */
+function _inspectDir(argv, projectRoot) {
+    MIG_DIR = path.resolve(projectRoot + path.sep + argv['mig-dir']);
+
+    if (!fs.existsSync(projectRoot + '/package.json')) {
+        return Promise.reject(new Error(`${projectRoot} isn't valid npm module, package.json not found`));
+    }
+    return utils.hasMigrationsStructure(projectRoot, argv['mig-dir']);
 }
 
 /**
@@ -179,10 +194,13 @@ function initMigrationCmd(argv) {
         if (!semver.valid(npmPackage.version)) {
             throw new Error(`"${npmPackage.version}" is not valid semver version`);
         }
+        //fetch current git semver release tags
         return utils.getGitTagList(ROOT);
     }).then(function(tagList) {
         tags = tagList;
         migVersion = npmPackage.version;
+        //if current package.json version already has an equivalent git tag,
+        //add `development` prerelease flag to the generated migration
         if (~tags.indexOf(npmPackage.version)) {
             if (semver.prerelease(migVersion)) {
                 migVersion += '.';
@@ -192,9 +210,13 @@ function initMigrationCmd(argv) {
             migVersion += 'development';
         }
         latestRelease = utils.getPreviousRelease(npmPackage.version, tags);
+        //fetches dirrectories from $MIG_DIR/src/*
         return utils.fetchMigrationTables(MIG_DIR);
     }).then(function(tables) {
         let _tables = _.reduce(tables, function(out, val, key) {
+            //we are gonna work only with the most recent version of a table
+            //schema -> directories in $MIG_DIR/src/ can be version like:
+            //$TABLE_NAME_v1 $TABLE_NAME_v2 etc...
             if (val instanceof Array) {
                 let table = _.clone(val[0]);
                 table.table = key;
@@ -203,6 +225,8 @@ function initMigrationCmd(argv) {
             return out;
         }, []);
 
+        //reads the actual schema.sql & seed.sql files and populates corresponding
+        //$table in _tables collection
         return utils.populateMigrationDefinitions(_tables, latestRelease, ROOT);
     }).then(function(tables) {
         tables.forEach(function(table) {
@@ -219,6 +243,7 @@ function initMigrationCmd(argv) {
             console.info('No database changes detected. Creating empty migration file');
         }
 
+        //wrap sql commands into a transaction and save on fs
         let promise = utils.createPlainSqlMigration(
             tables,
             migVersion,
@@ -264,6 +289,7 @@ function migrationStatusCmd(argv) {
  * @param {Object} argv
  */
 function seedCmd(argv) {
+    return seedAllCmd(argv);
 }
 
 /**
@@ -272,11 +298,18 @@ function seedCmd(argv) {
 function seedAllCmd(argv) {
     const sequelize = require('./lib/sequelize.js');
 
-    return _init(argv).then(function() {
+    //make sure cwd is a npm module and contains a folder with migrations
+    return _inspectDir(argv, process.cwd()).then(function(has) {
+        if (!has) {
+            console.error(`${process.cwd()} doesn't have valid "migrations" folder`);
+            return process.exit(1);
+        }
         return utils.fetchMigrationTables(MIG_DIR);
     }).then(function(tables) {
         let _tables = _.reduce(tables, function(out, val, key) {
-            if (val instanceof Array) {
+            if (val instanceof Array
+                && (argv.table === undefined || key === argv.table)
+            ) {
                 let table = _.clone(val[0]);
                 table.table = key;
                 out.push(table);
@@ -284,7 +317,7 @@ function seedAllCmd(argv) {
             return out;
         }, []);
 
-        return utils.populateMigrationDefinitions(_tables, null, ROOT);
+        return utils.populateMigrationDefinitionsFromFS(_tables, null, ROOT);
     }).then(function(tables) {
         tables.forEach(function(table) {
             let _seedRequires = utils.getRequiredTables(table.seedData);
@@ -293,6 +326,9 @@ function seedAllCmd(argv) {
             table.requires = _.union(_seedRequires, _schemaRequires);
             table.seedDataDelta = table.seedData;
         });
+        //leave only the tables whose data & schema have changed since
+        //previous release & sort tables so that those tables which are dependent
+        //on others come after them
         tables = utils.filterAndSortTables(tables);
 
         if (!tables.length) {
@@ -338,7 +374,11 @@ function migrateCmd(argv) {
     const sequelize = require('./lib/sequelize.js');
     const Migrations = sequelize.modelManager.getModel('migrations');
 
-    return _init(argv).then(function() {
+    return _inspectDir(argv, process.cwd()).then(function(has) {
+        if (!has) {
+            console.error(`${process.cwd()} doesn't have valid "migrations" folder`);
+            return process.exit(1);
+        }
         return utils.fetchMigrationState(Migrations);
     }).then(function(version) {
         let migrations = utils.fetchMigrationScripts(MIG_DIR, version);
@@ -396,6 +436,9 @@ function _openInEditorWhenInteractive(fPath, argv) {
 }
 
 /**
+ * creates sql file named seed.sql or schema.sql at corresponding location
+ * for the db table
+ *
  * @param {Object} argv
  * @param {String} subject - seed|schema
  * @return {Promise}
