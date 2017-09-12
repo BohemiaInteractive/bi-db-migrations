@@ -1,4 +1,4 @@
-## FUTURE
+## 0.1.1
 
 * [FIXED] - correcly resolve database table dependencies when generating a new migration
 
