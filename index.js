@@ -22,6 +22,7 @@ _config.initialize();
  */
 var ROOT = null;
 var MIG_DIR = null;
+var CLI = false;
 
 module.exports = cliInterface;
 module.exports.initSeedCmd        = initSeedCmd;
@@ -37,6 +38,8 @@ module.exports.getConfig          = function() {
 
 
 function cliInterface(yargs) {
+
+    CLI = true;
 
     return yargs
     .usage('$0 <command> [options]')
@@ -133,22 +136,23 @@ function cliInterface(yargs) {
  * @return {Promise}
  */
 function _init(argv) {
-    ROOT = utils.getNearestRepository();
+    return Promise.try(function() {
+        ROOT = utils.getNearestRepository();
 
-    if (argv.v > 1) console.info('Project root: ' + ROOT);
+        if (argv.v > 1) console.info('Project root: ' + ROOT);
 
-    global.verbose = argv.v;
+        global.verbose = argv.v;
 
-    if (typeof ROOT !== 'string') {
-        console.error('Failed to find git project root');
-        process.exit(1);
-    }
-
-    return _inspectDir(argv, ROOT).then(function(has) {
-        if (!has) {
-            return utils.initFS(ROOT, argv['mig-dir']);
+        if (typeof ROOT !== 'string') {
+            return _exit('Failed to find git project root', 1);
         }
-    })
+
+        return _inspectDir(argv, ROOT).then(function(has) {
+            if (!has) {
+                return utils.initFS(ROOT, argv['mig-dir']);
+            }
+        });
+    });
 }
 
 
@@ -244,7 +248,7 @@ function initMigrationCmd(argv) {
         }
 
         //wrap sql commands into a transaction and save on fs
-        let promise = utils.createPlainSqlMigration(
+        let promise = utils.createMigration(
             tables,
             migVersion,
             MIG_DIR,
@@ -253,6 +257,9 @@ function initMigrationCmd(argv) {
         );
 
         return promise.then(function(fPath) {
+            if (argv.verbose) {
+                console.info(`Created ${fPath}`);
+            }
             return _openInEditorWhenInteractive(fPath, argv);
         });
     });
@@ -262,26 +269,26 @@ function initMigrationCmd(argv) {
  * @param {Object} argv
  */
 function migrationStatusCmd(argv) {
-    const sequelize = require('./lib/sequelize.js');
-    const Migrations = sequelize.modelManager.getModel('migrations');
+    return Promise.try(function() {
+        const sequelize = require('./lib/sequelize.js');
+        const Migrations = sequelize.modelManager.getModel('migrations');
 
-    return Migrations.findAll({
-        order: [['id', 'DESC']],
-        limit: argv.limit
-    }).then(function(migrations) {
-        let t = new Table;
-        migrations.forEach(function(mig) {
-            t.cell('version', mig.version);
-            t.cell('status', mig.status);
-            t.cell('created_at', mig.created_at);
-            t.cell('note', mig.note);
-            t.newRow();
+        return Migrations.findAll({
+            order: [['id', 'DESC']],
+            limit: argv.limit
+        }).then(function(migrations) {
+            let t = new Table;
+            migrations.forEach(function(mig) {
+                t.cell('version', mig.version);
+                t.cell('status', mig.status);
+                t.cell('created_at', mig.created_at);
+                t.cell('note', mig.note);
+                t.newRow();
+            });
+            return _exit(t.toString(), 0);
+        }).catch(function(err) {
+            return _exit(err, 1);
         });
-        console.info(t.toString());
-        process.exit(0);
-    }).catch(function(err) {
-        console.error(err.message);
-        process.exit(1);
     });
 }
 
@@ -296,74 +303,74 @@ function seedCmd(argv) {
  * @param {Object} argv
  */
 function seedAllCmd(argv) {
-    const sequelize = require('./lib/sequelize.js');
+    return Promise.try(function() {
+        const sequelize = require('./lib/sequelize.js');
 
-    //make sure cwd is a npm module and contains a folder with migrations
-    return _inspectDir(argv, process.cwd()).then(function(has) {
-        if (!has) {
-            console.error(`${process.cwd()} doesn't have valid "migrations" folder`);
-            return process.exit(1);
-        }
-        return utils.fetchMigrationTables(MIG_DIR);
-    }).then(function(tables) {
-        let _tables = _.reduce(tables, function(out, val, key) {
-            if (val instanceof Array
-                && (argv.table === undefined || key === argv.table)
-            ) {
-                let table = _.clone(val[0]);
-                table.table = key;
-                out.push(table);
+        //make sure cwd is a npm module and contains a folder with migrations
+        return _inspectDir(argv, process.cwd()).then(function(has) {
+            if (!has) {
+                return _exit(`${process.cwd()} doesn't have valid "migrations" folder`, 1);
             }
-            return out;
-        }, []);
+            return utils.fetchMigrationTables(MIG_DIR);
+        }).then(function(tables) {
+            let _tables = _.reduce(tables, function(out, val, key) {
+                if (val instanceof Array
+                    && (argv.table === undefined || key === argv.table)
+                ) {
+                    let table = _.clone(val[0]);
+                    table.table = key;
+                    out.push(table);
+                }
+                return out;
+            }, []);
 
-        return utils.populateMigrationDefinitionsFromFS(_tables, null, ROOT);
-    }).then(function(tables) {
-        tables.forEach(function(table) {
-            let _seedRequires = utils.getRequiredTables(table.seedData);
-            let _schemaRequires = utils.getRequiredTables(table.schemaData);
+            return utils.populateMigrationDefinitionsFromFS(_tables, null, ROOT);
+        }).then(function(tables) {
+            tables.forEach(function(table) {
+                let _seedRequires = utils.getRequiredTables(table.seedData);
+                let _schemaRequires = utils.getRequiredTables(table.schemaData);
 
-            table.requires = _.union(_seedRequires, _schemaRequires);
-            table.seedDataDelta = table.seedData;
-        });
-        //leave only the tables whose data & schema have changed since
-        //previous release & sort tables so that those tables which are dependent
-        //on others come after them
-        tables = utils.filterAndSortTables(tables);
+                table.requires = _.union(_seedRequires, _schemaRequires);
+                table.seedDataDelta = table.seedData;
+            });
+            //leave only the tables whose data & schema have changed since
+            //previous release & sort tables so that those tables which are dependent
+            //on others come after them
+            tables = utils.filterAndSortTables(tables);
 
-        if (!tables.length) {
-            if (global.verbose) {
-                console.info('Nothing to seed.');
+            if (!tables.length) {
+                if (argv.verbose) {
+                    console.info('Nothing to seed.');
+                }
+                return _exit(null, 0);
             }
-            process.exit(0);
-        }
 
-        let sql = '';
-        tables.forEach(function(table) {
-            sql += table.seedData;
-        });
-        //sql = sqlUtils[].main('', sql, Date.now());
-        sql = utils.renderTemplate(sequelize.options.dialect, {
-            seed: sql,
-            migName: 'seeder_' + Date.now()
-        });
+            let sql = '';
+            tables.forEach(function(table) {
+                sql += table.seedData;
+            });
+            //sql = sqlUtils[].main('', sql, Date.now());
+            sql = utils.renderTemplate(sequelize.options.dialect, {
+                seed: sql,
+                migName: 'seeder_' + Date.now()
+            });
 
-        if (argv.verbose) {
-            console.info('Seeding...');
-        }
-        if (argv.verbose > 2) {
-            console.info(sql);
-        }
-
-        return utils.migratePlainSql.call(sql, sequelize).then(function() {
             if (argv.verbose) {
-                console.info('Successfully seeded.');
+                console.info('Seeding...');
             }
-            process.exit(0);
+            if (argv.verbose > 2) {
+                console.info(sql);
+            }
+
+            return utils.migratePlainSql.call(sql, sequelize).then(function() {
+                if (argv.verbose) {
+                    console.info('Successfully seeded.');
+                }
+                return _exit(null, 0);
+            });
+        }).catch(function(err) {
+            return _exit(err, 1);
         });
-    }).catch(function(err) {
-        console.error(err.message);
-        process.exit(1);
     });
 }
 
@@ -371,53 +378,49 @@ function seedAllCmd(argv) {
  * @param {Object} argv
  */
 function migrateCmd(argv) {
-    const sequelize = require('./lib/sequelize.js');
-    const Migrations = sequelize.modelManager.getModel('migrations');
+    return Promise.try(function() {
+        const sequelize = require('./lib/sequelize.js');
+        const Migrations = sequelize.modelManager.getModel('migrations');
 
-    return _inspectDir(argv, process.cwd()).then(function(has) {
-        if (!has) {
-            console.error(`${process.cwd()} doesn't have valid "migrations" folder`);
-            return process.exit(1);
-        }
-        return utils.fetchMigrationState(Migrations);
-    }).then(function(version) {
-        let migrations = utils.fetchMigrationScripts(MIG_DIR, version);
-
-        return Promise.each(migrations, function(mig) {
-            let fn;
-
-            switch (mig.type) {
-                case 'sql':
-                    let sql = fs.readFileSync(mig.path);
-                    fn = utils.migratePlainSql.bind(sql.toString());
-                    break;
-                case 'js':
-                    fn = require(mig.path);
-                    break;
+        return _inspectDir(argv, process.cwd()).then(function(has) {
+            if (!has) {
+                return _exit(`${process.cwd()} doesn't have valid "migrations" folder`, 1)
             }
+            return utils.fetchMigrationState(Migrations);
+        }).then(function(version) {
+            let migrations = utils.fetchMigrationScripts(MIG_DIR, version);
 
-            if (argv.verbose) {
-                console.info(`Initializing ${mig.version} migration...`);
-            }
+            return Promise.each(migrations, function(mig) {
+                let fn;
 
-            return utils.migrate(fn, mig.version, sequelize).then(function() {
-                if (argv.verbose) {
-                    console.info(`${mig.version} migrated successfully.`);
+                switch (mig.type) {
+                    case 'sql':
+                        let sql = fs.readFileSync(mig.path);
+                        fn = utils.migratePlainSql.bind(sql.toString());
+                        break;
+                    case 'js':
+                        fn = require(mig.path);
+                        break;
                 }
+
+                if (argv.verbose) {
+                    console.info(`Initializing ${mig.version} migration...`);
+                }
+
+                return utils.migrate(fn, mig.version, sequelize).then(function() {
+                    if (argv.verbose) {
+                        console.info(`${mig.version} migrated successfully.`);
+                    }
+                });
             });
+        }).catch(function(err) {
+            return _exit(err, 1);
+        }).then(function() {
+            if (argv.verbose) {
+                console.info('All done.');
+            }
+            return _exit(null, 0);
         });
-    }).catch(function(err) {
-        if (err.toJSON) {
-            console.error(err.toJSON());
-        } else {
-            console.error(err);
-        }
-        process.exit(1);
-    }).then(function() {
-        if (argv.verbose) {
-            console.info('All done.');
-            process.exit(0);
-        }
     });
 }
 
@@ -449,7 +452,20 @@ function _initSeedOrSchema(argv, subject) {
             require: argv.require
         });
 
-        let fPath = 'src' + path.sep + argv.table + path.sep + subject + '.sql';
+        let fName;
+
+        switch (subject) {
+            case 'schema':
+                fName = 'schema';
+                break;
+            case 'seed':
+                fName = 'data';
+                break;
+            default:
+                throw new Error(`Invalid subject ${subject}`);
+        }
+
+        let fPath = 'src' + path.sep + argv.table + path.sep + fName + '.sql';
 
         try {
             utils.createFile(fPath, content, MIG_DIR);
@@ -459,13 +475,45 @@ function _initSeedOrSchema(argv, subject) {
             }
         } catch(e) {
             if (e.code == 'EEXIST') {
-                console.error(`${subject} file already created at ${MIG_DIR + path.sep + fPath}`);
-                console.error('Can not overwrite.');
-                process.exit(1);
+                return _exit(
+                    `${subject} file already created at ${MIG_DIR + path.sep + fPath} \nCan not overwrite.`
+                    , 1
+                );
             }
             throw e;
         }
 
         return _openInEditorWhenInteractive(MIG_DIR + path.sep + fPath, argv);
     });
+}
+
+/**
+ * @param {Error|String} message
+ * @param {Integer} code
+ * @throws {Error}
+ * @return {undefined}
+ */
+function _exit(message, code) {
+    if (CLI) {
+        let log = code > 0 ?
+            console.error.bind(console)
+            : console.info.bind(console);
+
+        if (message) {
+            message = message.toJSON ? message.toJSON() : message.toString();
+            return log(message);
+        }
+
+        return process.exit(code);
+    } else {
+        if (code > 0) {
+            if (subject instanceof Error) {
+                throw subject;
+            } else if (typeof subject === 'string') {
+                throw new Error(subject);
+            }
+        } else {
+            return message;
+        }
+    }
 }
