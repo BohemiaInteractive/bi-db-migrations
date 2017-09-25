@@ -9,7 +9,7 @@ let mig = module.exports.migration = new Migration();
 
 function cliInterface(yargs) {
 
-    CLI = true;
+    mig.CLI = true;
 
     return yargs
     .usage('$0 <command> [options]')

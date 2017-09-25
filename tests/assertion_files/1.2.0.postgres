@@ -1,0 +1,12 @@
+DO $$
+    -- Start transaction immediately
+    BEGIN
+    -- SCHEMA CHANGES
+        ALTER TABLE ONLY app_type ADD CONSTRAINT app_type_name_key UNIQUE (name);
+        ALTER TABLE ONLY app ADD CONSTRAINT app_pkey PRIMARY KEY (id);
+
+    -- DATA CHANGES
+        INSERT INTO app (id, name, app_type_id) VALUES ('test7', 'Arma 7', 2);
+
+    END
+$$;
