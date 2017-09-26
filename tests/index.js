@@ -1,6 +1,7 @@
 const Promise        = require('bluebird');
 const _              = require('lodash');
 const fs             = Promise.promisifyAll(require('fs'));
+const fse            = Promise.promisifyAll(require('fs-extra'));
 const tmp            = require('tmp');
 const path           = require('path');
 const childProcess   = require('child_process');
@@ -249,6 +250,52 @@ describe('bi-service-sequelize-migrations', function() {
                 this.tmpDir.removeCallback();
             });
 
+            it('should include only the highest available version of folder with database table changes in generated migration', function() {
+                //eg.: if thwo folders migrations/src/country & migrations/src/country_v2 are in place, then it should ignore "/src/country" directory
+                let appPath = path.resolve(this.tmpDir.name + '/migrations/src/app_v2');
+                let appTypePath = path.resolve(this.tmpDir.name + '/migrations/src/app_type_v2');
+
+                return Promise.all([
+                    fs.mkdirAsync(appTypePath),
+                    fs.mkdirAsync(appPath),
+                ]).then(function() {
+                    let prom1 = fs.writeFileAsync(
+                        appPath + '/schema.sql',
+                        '-- {require:app_type}\n' +
+                        'CREATE TABLE app (\n' +
+                        '    id SERIAL PRIMARY KEY,\n' +
+                        '    app_type_id integer,\n' +
+                        ');\n'
+                    );
+
+                    let prom2 = fs.writeFileAsync(
+                        appTypePath + '/schema.sql',
+                        'CREATE TABLE app_type (\n' +
+                        '    id SERIAL PRIMARY KEY,\n' +
+                        '    name character varying(255),\n' +
+                        ');\n'
+                    );
+
+                    return Promise.all([prom1, prom2]);
+                }).bind(this).then(function() {
+                    return this.mig.initMigrationCmd({
+                        'mig-dir': 'migrations',
+                        type: 'sql',
+                        dialect: 'postgres'
+                    }).bind(this).then(function() {
+                        let p = path.resolve(this.tmpDir.name + `/migrations/1.2.0.sql`);
+                        return fs.statAsync(p).then(function(stat) {
+                            expect(stat.isFile()).to.be.equal(true, `${p} does not exists`);
+                            return fs.readFileAsync(p);
+                        }).then(function(data) {
+                            data.toString().should.be.equal(
+                                fs.readFileSync(__dirname + `/assertion_files/1.2.0_v2.postgres`).toString()
+                            );
+                        });
+                    });
+                });
+            });
+
             it('should create a new migration file with changes since last git release tag', function() {
                 return this.mig.initMigrationCmd({
                     'mig-dir': 'migrations',
@@ -261,7 +308,7 @@ describe('bi-service-sequelize-migrations', function() {
                         return fs.readFileAsync(p);
                     }).then(function(data) {
                         data.toString().should.be.equal(
-                            fs.readFileSync(__dirname + `/assertion_files/1.2.0.postgres`).toString()
+                            fs.readFileSync(__dirname + `/assertion_files/1.2.0_v2.postgres`).toString()
                         );
                     });
                 });

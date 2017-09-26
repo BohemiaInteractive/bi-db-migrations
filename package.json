@@ -1,47 +1,47 @@
 {
-    "name": "bi-service-sequelize-migrations",
-    "version": "0.2.0",
-    "description": "bi-service CLI plugin for db migrations",
-    "main": "index.js",
-    "testFramework": "mocha",
-    "author": "Bohemia Interactive",
-    "contributors": [
-        "fogine <TODO>"
-    ],
-    "private": false,
-    "engines": {
-        "node": ">=6.4.0"
-    },
-    "license": "GPL-3.0",
-    "files": [
-        "index.js",
-        "lib",
-        "LICENCE",
-        "COPYRIGHT",
-        "CHANGELOG.md"
-    ],
-    "scripts": {
-        "coverage": "./node_modules/istanbul/lib/cli.js cover ./node_modules/mocha/bin/_mocha -- --ui bdd -R spec -t 5000 'tests/**/*.js'",
-        "tests": "mocha --ui bdd --colors --globals verbose --check-leaks -t 5000 --reporter spec 'tests/**/*.js'",
-        "test": "npm run tests"
-    },
-    "dependencies": {
-        "mustache": "^2.3.0",
-        "easy-table": "^1.0.0",
-        "bi-config": ">=2.0.0-alpha",
-        "bluebird": "^3.4.6",
-        "sequelize": "^3.27.0",
-        "lodash": "^4.16.2",
-        "semver": "^5.4.1"
-    },
-    "devDependencies": {
-        "chai": "^4.1.2",
-        "chai-as-promised": "^7.1.1",
-        "istanbul": "^0.4.3",
-        "mocha": "^3.5.3",
-        "sinon": "^1.17.3",
-        "sinon-as-promised": "^4.0.0",
-        "sinon-chai": "^2.8.0",
-        "tmp": "0.0.33"
-    }
+  "name": "bi-service-sequelize-migrations",
+  "version": "0.2.0",
+  "description": "bi-service CLI plugin for db migrations",
+  "main": "index.js",
+  "testFramework": "mocha",
+  "author": "Bohemia Interactive",
+  "contributors": [
+    "fogine <TODO>"
+  ],
+  "private": false,
+  "engines": {
+    "node": ">=6.4.0"
+  },
+  "license": "GPL-3.0",
+  "files": [
+    "index.js",
+    "lib",
+    "LICENCE",
+    "COPYRIGHT",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "coverage": "./node_modules/istanbul/lib/cli.js cover ./node_modules/mocha/bin/_mocha -- --ui bdd -R spec -t 5000 'tests/**/*.js'",
+    "tests": "mocha --ui bdd --colors --globals verbose --check-leaks -t 5000 --reporter spec 'tests/**/*.js'",
+    "test": "npm run tests"
+  },
+  "dependencies": {
+    "bi-config": ">=2.0.0-alpha",
+    "bluebird": "^3.4.6",
+    "easy-table": "^1.0.0",
+    "lodash": "^4.16.2",
+    "mustache": "^2.3.0",
+    "semver": "^5.4.1",
+    "sequelize": "^3.27.0"
+  },
+  "devDependencies": {
+    "chai": "^4.1.2",
+    "chai-as-promised": "^7.1.1",
+    "istanbul": "^0.4.3",
+    "mocha": "^3.5.3",
+    "sinon": "^1.17.3",
+    "sinon-as-promised": "^4.0.0",
+    "sinon-chai": "^2.8.0",
+    "tmp": "0.0.33"
+  }
 }
