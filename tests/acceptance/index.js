@@ -1,7 +1,6 @@
 const Promise        = require('bluebird');
 const _              = require('lodash');
 const fs             = Promise.promisifyAll(require('fs'));
-const fse            = Promise.promisifyAll(require('fs-extra'));
 const tmp            = require('tmp');
 const path           = require('path');
 const childProcess   = require('child_process');
@@ -9,6 +8,7 @@ const chai           = require('chai');
 const sinon          = require('sinon');
 const chaiAsPromised = require('chai-as-promised');
 const sinonChai      = require("sinon-chai");
+const Sequelize      = require("sequelize");
 
 //this makes sinon-as-promised available in sinon:
 require('sinon-as-promised');
@@ -19,7 +19,8 @@ chai.should();
 chai.use(sinonChai);
 chai.use(chaiAsPromised);
 
-const Migration = require('../lib/migration.js');
+const Migration = require('../../lib/migration.js');
+const utils     = require('../../lib/util.js');
 
 before(function() {
     this.spawnSync = function(cmd, args, options) {
@@ -80,10 +81,10 @@ before(function() {
             mig.initSchemaCmd(optAppType),
             mig.initSeedCmd(optAppType),
         ]).then(function() {
-            let appSchemaData     = fs.readFileSync(path.resolve(__dirname + '/data/app/schema.sql'));
-            let appSeedData       = fs.readFileSync(path.resolve(__dirname + '/data/app/data.sql'));
-            let appTypeSchemaData = fs.readFileSync(path.resolve(__dirname + '/data/app_type/schema.sql'));
-            let appTypeSeedData   = fs.readFileSync(path.resolve(__dirname + '/data/app_type/data.sql'));
+            let appSchemaData     = fs.readFileSync(path.resolve(__dirname + '/../data/app/schema.sql'));
+            let appSeedData       = fs.readFileSync(path.resolve(__dirname + '/../data/app/data.sql'));
+            let appTypeSchemaData = fs.readFileSync(path.resolve(__dirname + '/../data/app_type/schema.sql'));
+            let appTypeSeedData   = fs.readFileSync(path.resolve(__dirname + '/../data/app_type/data.sql'));
 
             let fdAppSchema     = fs.openSync(migSrcPath + '/app/schema.sql', 'a');
             let fdAppSeed       = fs.openSync(migSrcPath + '/app/data.sql', 'a');
@@ -103,7 +104,7 @@ before(function() {
     };
 });
 
-describe('bi-service-sequelize-migrations', function() {
+describe('acceptance', function() {
     before(function() {
         tmp.setGracefulCleanup();
     });
@@ -185,7 +186,7 @@ describe('bi-service-sequelize-migrations', function() {
                             return fs.readFileAsync(p);
                         }).then(function(data) {
                             data.toString().should.be.equal(
-                                fs.readFileSync(__dirname + `/assertion_files/1.1.0.${dialect}`).toString()
+                                fs.readFileSync(__dirname + `/../assertion_files/1.1.0.${dialect}`).toString()
                             );
                         });
                     });
@@ -250,6 +251,24 @@ describe('bi-service-sequelize-migrations', function() {
                 this.tmpDir.removeCallback();
             });
 
+            it('should create a new migration file with changes since last git release tag', function() {
+                return this.mig.initMigrationCmd({
+                    'mig-dir': 'migrations',
+                    type: 'sql',
+                    dialect: 'postgres'
+                }).bind(this).then(function() {
+                    let p = path.resolve(this.tmpDir.name + `/migrations/1.2.0.sql`);
+                    return fs.statAsync(p).then(function(stat) {
+                        expect(stat.isFile()).to.be.equal(true, `${p} does not exists`);
+                        return fs.readFileAsync(p);
+                    }).then(function(data) {
+                        data.toString().should.be.equal(
+                            fs.readFileSync(__dirname + `/../assertion_files/1.2.0.postgres`).toString()
+                        );
+                    });
+                });
+            });
+
             it('should include only the highest available version of folder with database table changes in generated migration', function() {
                 //eg.: if thwo folders migrations/src/country & migrations/src/country_v2 are in place, then it should ignore "/src/country" directory
                 let appPath = path.resolve(this.tmpDir.name + '/migrations/src/app_v2');
@@ -289,28 +308,85 @@ describe('bi-service-sequelize-migrations', function() {
                             return fs.readFileAsync(p);
                         }).then(function(data) {
                             data.toString().should.be.equal(
-                                fs.readFileSync(__dirname + `/assertion_files/1.2.0_v2.postgres`).toString()
+                                fs.readFileSync(__dirname + `/../assertion_files/1.2.0_v2.postgres`).toString()
                             );
                         });
                     });
                 });
             });
+        });
+    });
 
-            it('should create a new migration file with changes since last git release tag', function() {
-                return this.mig.initMigrationCmd({
-                    'mig-dir': 'migrations',
-                    type: 'sql',
-                    dialect: 'postgres'
+    ['postgres', 'mysql'].forEach(function(dialect) {
+        describe(`seedCmd ${dialect}`, function() {
+            before(function() {
+                return this.initMigEnv('1.1.0').bind(this).then(function() {
+                    return this.createMigrationDevDbFiles(this.mig, this.tmpDir.name);
                 }).bind(this).then(function() {
-                    let p = path.resolve(this.tmpDir.name + `/migrations/1.2.0.sql`);
-                    return fs.statAsync(p).then(function(stat) {
-                        expect(stat.isFile()).to.be.equal(true, `${p} does not exists`);
-                        return fs.readFileAsync(p);
-                    }).then(function(data) {
-                        data.toString().should.be.equal(
-                            fs.readFileSync(__dirname + `/assertion_files/1.2.0_v2.postgres`).toString()
-                        );
-                    });
+                    this.sequelizeMock = {
+                        options: {dialect: dialect},
+                        QueryTypes: {
+                            SELECT: Sequelize.QueryTypes.SELECT
+                        },
+                        query: sinon.stub()
+                    };
+
+                    this.migratePlainSqlSpy = sinon.spy(utils, 'migratePlainSql');
+                    this.getSequelizeStub = sinon.stub(this.mig, '_getSequelize')
+                        .returns(this.sequelizeMock)
+                });
+            });
+
+            afterEach(function() {
+                this.getSequelizeStub.reset();
+                this.migratePlainSqlSpy.reset();
+                this.sequelizeMock.query.reset();
+            });
+
+            after(function() {
+                this.migratePlainSqlSpy.restore();
+                this.getSequelizeStub.restore();
+                this.tmpDir.removeCallback();
+            });
+
+            it('should generate and execute data seeding sql query with contents of $TMP_DIR/migrations/src/app_type/data.sql', function() {
+                this.sequelizeMock.query.returns(Promise.resolve());
+
+                let expectedSeedData = fs.readFileSync(
+                    path.resolve(__dirname + `/../assertion_files/seedCmd_app_type.${dialect}`)
+                );
+
+                return this.mig.seedCmd({
+                    'mig-dir': 'migrations',
+                    table: 'app_type',
+                }).bind(this).then(function() {
+                    this.getSequelizeStub.should.have.been.calledOnce;
+                    this.migratePlainSqlSpy.should.have.been.calledOnce;
+                    this.sequelizeMock.query.should.have.been.calledOnce;
+                    expect(this.sequelizeMock.query.firstCall.args[0] + '')
+                        .to.be.equal(expectedSeedData.toString());
+                    expect(this.sequelizeMock.query.firstCall.args[1])
+                        .to.be.eql({ type: Sequelize.QueryTypes.SELECT });
+                });
+            });
+
+            it('should generate and execute data seeding sql query for all tables in $TMP_DIR/migrations/src/', function() {
+                this.sequelizeMock.query.returns(Promise.resolve());
+
+                let expectedSeedData = fs.readFileSync(
+                    path.resolve(__dirname + `/../assertion_files/seedCmd.${dialect}`)
+                );
+
+                return this.mig.seedCmd({
+                    'mig-dir': 'migrations',
+                }).bind(this).then(function() {
+                    this.getSequelizeStub.should.have.been.calledOnce;
+                    this.migratePlainSqlSpy.should.have.been.calledOnce;
+                    this.sequelizeMock.query.should.have.been.calledOnce;
+                    expect(this.sequelizeMock.query.firstCall.args[0] + '')
+                        .to.be.equal(expectedSeedData.toString());
+                    expect(this.sequelizeMock.query.firstCall.args[1])
+                        .to.be.eql({ type: Sequelize.QueryTypes.SELECT });
                 });
             });
         });

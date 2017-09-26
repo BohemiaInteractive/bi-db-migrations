@@ -73,7 +73,7 @@ function cliInterface(yargs) {
             type: 'string'
         },
     }, mig.seedCmd)
-    .command(['seed:all'], 'Run every seeder', {}, seedAllCmd)
+    .command(['seed:all'], 'Run every seeder', {}, mig.seedCmd)
     .option('mig-dir', {
         describe: 'Base directory path for migrations (relative to project root dir)',
         default: 'migrations',
