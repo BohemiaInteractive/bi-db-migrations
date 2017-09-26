@@ -480,4 +480,57 @@ describe('acceptance', function() {
             });
         });
     });
+
+    describe('migrationStatusCmd', function() {
+        before(function() {
+            const mig = new Migration();
+            this.mig = mig;
+
+            mig.config.set('sequelize', {
+                host: 'unknown',
+                port: 0,
+                dialect: 'postgres',
+                username: 'unknown',
+                password: 'unknown',
+                db: 'test'
+            });
+
+            this.sequelize = mig._getSequelize();
+            this.Migrations = this.sequelize.modelManager.getModel('migrations');
+            sinon.stub(this.Migrations, 'findAll');
+        });
+
+        it('should return resolved promise with database migration state info', function() {
+            this.Migrations.findAll.returns(Promise.resolve([
+                {
+                    created_at : '2017-09-26 19:25',
+                    version    : '2.0.0',
+                    status     : 'ok',
+                    note       : 'note'
+                },
+                {
+                    created_at : '2017-09-26 19:25',
+                    version    : '1.0.0',
+                    status     : 'error',
+                    note       : 'errormsg'
+                }
+            ]));
+
+            return this.mig.migrationStatusCmd({
+                limit: 10
+            }).bind(this).then(function(str) {
+                this.Migrations.findAll.should.have.been.calledOnce;
+                this.Migrations.findAll.should.have.been.calledWith({
+                        order: [['id', 'DESC']],
+                        limit: 10
+                });
+                let expected =
+                'version  status  created_at        note    \n' +
+                '-------  ------  ----------------  --------\n' +
+                '2.0.0    ok      2017-09-26 19:25  note    \n' +
+                '1.0.0    error   2017-09-26 19:25  errormsg\n';
+                str.should.be.equal(expected);
+            });
+        });
+    });
 });

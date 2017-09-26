@@ -7,7 +7,7 @@ module.exports.Migration = Migration;
 
 let mig = module.exports.migration = new Migration();
 
-function cliInterface(yargs) {
+function cliInterface(yargs, strict) {
 
     mig.CLI = true;
 
@@ -52,7 +52,7 @@ function cliInterface(yargs) {
         dialect: {
             describe: 'SQL provider',
             choices: ['postgres', 'mysql'],
-            default: _config.get('sequelize:dialect') || 'postgres',
+            default: mig.config.get('sequelize:dialect') || 'postgres',
             type: 'string'
         },
     }, mig.initMigrationCmd)
@@ -95,5 +95,5 @@ function cliInterface(yargs) {
         global: true,
         type: 'boolean'
     })
-    .strict(true);
+    .strict(typeof strict === 'boolean' ? strict : true);
 }
