@@ -26,7 +26,7 @@ function cliInterface(yargs, strict) {
             array: true,
             type: 'string'
         },
-    }, mig.initSeedCmd)
+    }, mig.initSeedCmd.bind(mig))
     .command(['init:schema'], 'Creates a new schema file at $MIG_DIR/src/$TABLE/schema.sql and opens it with $EDITOR', {
         table: {
             alias: 't',
@@ -40,7 +40,7 @@ function cliInterface(yargs, strict) {
             array: true,
             type: 'string'
         },
-    }, mig.initSchemaCmd)
+    }, mig.initSchemaCmd.bind(mig))
     .command(['init:migration', 'init:mig'], 'Generates a new sql/js migration from the src/ table files', {
         type: {
             alias: 't',
@@ -55,7 +55,7 @@ function cliInterface(yargs, strict) {
             default: mig.config.get('sequelize:dialect') || 'postgres',
             type: 'string'
         },
-    }, mig.initMigrationCmd)
+    }, mig.initMigrationCmd.bind(mig))
     .command(['mig:status','migration:status'], 'List the status of migrations', {
         limit: {
             alias: 'l',
@@ -63,8 +63,8 @@ function cliInterface(yargs, strict) {
             default: 2,
             type: 'number'
         },
-    }, mig.migrationStatusCmd)
-    .command(['migrate'], 'Run pending migrations', {}, mig.migrateCmd)
+    }, mig.migrationStatusCmd.bind(mig))
+    .command(['migrate'], 'Run pending migrations', {}, mig.migrateCmd.bind(mig))
     .command(['seed'], 'Run seeder for specified table', {
         table: {
             alias: 't',
@@ -72,8 +72,8 @@ function cliInterface(yargs, strict) {
             required: true,
             type: 'string'
         },
-    }, mig.seedCmd)
-    .command(['seed:all'], 'Run every seeder', {}, mig.seedCmd)
+    }, mig.seedCmd.bind(mig))
+    .command(['seed:all'], 'Run every seeder', {}, mig.seedCmd.bind(mig))
     .option('mig-dir', {
         describe: 'Base directory path for migrations (relative to project root dir)',
         default: 'migrations',
