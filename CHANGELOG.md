@@ -1,4 +1,4 @@
-## FUTURE
+## 0.3.1
 
 * [FIXED] - CLI command functions were being executed with incorrect scope context
 
