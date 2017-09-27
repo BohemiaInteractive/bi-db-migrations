@@ -10,6 +10,8 @@ const chaiAsPromised = require('chai-as-promised');
 const sinonChai      = require("sinon-chai");
 const Sequelize      = require("sequelize");
 
+global.Promise = Promise;
+
 //this makes sinon-as-promised available in sinon:
 require('sinon-as-promised');
 
@@ -19,8 +21,9 @@ chai.should();
 chai.use(sinonChai);
 chai.use(chaiAsPromised);
 
-const Migration = require('../../lib/migration.js');
-const utils     = require('../../lib/util.js');
+const Migration      = require('../../lib/migration.js');
+const utils          = require('../../lib/util.js');
+const MigrationError = require('../../lib/error/migrationError.js');
 
 before(function() {
     this.spawnSync = function(cmd, args, options) {
@@ -189,6 +192,24 @@ describe('acceptance', function() {
                                 fs.readFileSync(__dirname + `/../assertion_files/1.1.0.${dialect}`).toString()
                             );
                         });
+                    });
+                });
+            });
+
+            it(`should create $TMP_DIR/migrations/1.1.0.js migration file for postgres`, function() {
+                return this.mig.initMigrationCmd({
+                    'mig-dir': 'migrations',
+                    type: 'js',
+                    dialect: 'postgres'
+                }).bind(this).then(function() {
+                    let p = path.resolve(this.tmpDir.name + `/migrations/1.1.0.js`);
+                    return fs.statAsync(p).then(function(stat) {
+                        expect(stat.isFile()).to.be.equal(true, `${p} does not exists`);
+                        return fs.readFileAsync(p);
+                    }).then(function(data) {
+                        data.toString().should.be.equal(
+                            fs.readFileSync(__dirname + `/../assertion_files/1.1.0.js.mustache`).toString()
+                        );
                     });
                 });
             });
@@ -394,88 +415,225 @@ describe('acceptance', function() {
 
     describe('migrateCmd', function() {
 
-        let fakeMigrations = {
-            '1.0.0-alpha' : "select '1.0.0-alpha';\n",
-            '1.0.0'       : "select '1.0.0';\n",
-            '1.0.1'       : "select '1.0.1';\n",
-            '1.1.0'       : "select '1.1.0';\n",
-            '2.0.0-alpha' : "select '2.0.0-alpha';\n",
-            '2.0.0'       : "select '2.0.0';\n",
-        };
-        fakeMigrations.sortedVersions = [
-            '1.0.0-alpha', '1.0.0', '1.0.1', '1.1.0', '2.0.0-alpha', '2.0.0'
-        ];
+        describe('', function() {
+            let fakeMigrations = {
+                '1.0.0-alpha' : "select '1.0.0-alpha';\n",
+                '1.0.0'       : "select '1.0.0';\n",
+                '1.0.1'       : "select '1.0.1';",
+                '1.1.0'       : "select '1.1.0';\n",
+                '2.0.0-alpha' : "select '2.0.0-alpha';\n",
+                '2.0.0'       : "select '2.0.0';\n",
+            };
+            fakeMigrations.sortedVersions = [
+                '1.0.0-alpha', '1.0.0', '1.0.1', '1.1.0', '2.0.0-alpha', '2.0.0'
+            ];
 
-        before(function() {
-            return this.initMigEnv('1.1.0').bind(this).then(function() {
-                return utils.initFS(this.tmpDir.name, 'migrations');
-            }).then(function() {
-                const mig = this.mig;
-                const tmpDir = this.tmpDir;
+            before(function() {
+                return this.initMigEnv('1.1.0').bind(this).then(function() {
+                    return utils.initFS(this.tmpDir.name, 'migrations');
+                }).then(function() {
+                    const mig = this.mig;
+                    const tmpDir = this.tmpDir;
 
-                mig.config.set('sequelize', {
-                    host: 'unknown',
-                    port: 0,
-                    dialect: 'postgres',
-                    username: 'unknown',
-                    password: 'unknown',
-                    db: 'test'
-                });
+                    mig.config.set('sequelize', {
+                        host: 'unknown',
+                        port: 0,
+                        dialect: 'postgres',
+                        username: 'unknown',
+                        password: 'unknown',
+                        db: 'test'
+                    });
 
-                this.sequelize = mig._getSequelize();
-                const Migrations = this.sequelize.modelManager.getModel('migrations');
-                sinon.stub(this.sequelize, 'query');
-                sinon.stub(Migrations, 'create').returns(Promise.resolve({}));
-                sinon.stub(Migrations, 'update').returns(Promise.resolve({}));
+                    this.sequelize = mig._getSequelize();
+                    const Migrations = this.sequelize.modelManager.getModel('migrations');
+                    this.Migrations = Migrations;
 
-                this.fetchMigrationStateStub = sinon.stub(utils, 'fetchMigrationState');
-                this.migratePlainSqlSpy = sinon.spy(utils, 'migratePlainSql');
-                this.getSequelizeStub = sinon.stub(this.mig, '_getSequelize')
-                    .returns(this.sequelize)
+                    sinon.stub(this.sequelize, 'query');
+                    sinon.stub(Migrations, 'create').returns(Promise.resolve({}));
+                    sinon.stub(Migrations, 'update').returns(Promise.resolve({}));
 
-                this.fakeMigrations = fakeMigrations;
+                    this.fetchMigrationStateStub = sinon.stub(utils, 'fetchMigrationState');
+                    this.migratePlainSqlSpy = sinon.spy(utils, 'migratePlainSql');
+                    this.getSequelizeStub = sinon.stub(this.mig, '_getSequelize')
+                        .returns(this.sequelize)
 
-                return Promise.map(fakeMigrations.sortedVersions, function(version) {
-                    let fPath = path.resolve(tmpDir.name + `/migrations/${version}.sql`);
-                    return fs.writeFileAsync(fPath, fakeMigrations[version]);
+                    this.fakeMigrations = fakeMigrations;
+
+                    return Promise.map(fakeMigrations.sortedVersions, function(version) {
+                        let ext = 'sql'
+                        ,   fPath
+                        ,   fContent = fakeMigrations[version];
+
+                        if (version === '1.0.1') {
+                            fContent = `module.exports = function(seq) { return seq.query("${fContent}"); }`;
+                            ext = 'js';
+                        }
+
+                        fPath = path.resolve(tmpDir.name + `/migrations/${version}.${ext}`);
+                        return fs.writeFileAsync(fPath, fContent);
+                    });
                 });
             });
-        });
 
-        afterEach(function() {
-            this.fetchMigrationStateStub.reset();
-            this.getSequelizeStub.reset();
-            this.migratePlainSqlSpy.reset();
-            this.sequelize.query.reset();
-        });
-
-        let assertions = [
-            {
-                state: null,
-                toBeMigrated: fakeMigrations.sortedVersions
-            }
-        ];
-
-        fakeMigrations.sortedVersions.forEach(function(version, index) {
-            assertions.push({
-                state: version,
-                toBeMigrated: fakeMigrations.sortedVersions.slice(index+1)
+            afterEach(function() {
+                this.fetchMigrationStateStub.reset();
+                this.getSequelizeStub.reset();
+                this.migratePlainSqlSpy.reset();
+                this.sequelize.query.reset();
+                this.Migrations.create.reset();
+                this.Migrations.update.reset();
             });
-        });
 
-        assertions.forEach(function(dataset, index) {
-            it(`should execute correct set of migrations relative to current db state so that the db ends up in "up-to-date" state ${index}`, function() {
-                this.sequelize.query.returns(Promise.resolve({}))
-                this.fetchMigrationStateStub.returns(Promise.resolve(dataset.state));
+            after(function() {
+                this.fetchMigrationStateStub.restore();
+                this.getSequelizeStub.restore();
+                this.migratePlainSqlSpy.restore();
+                this.sequelize.query.restore();
+                this.Migrations.create.restore();
+                this.Migrations.update.restore();
+            });
+
+            let assertions = [
+                {
+                    state: null,
+                    toBeMigrated: fakeMigrations.sortedVersions
+                }
+            ];
+
+            fakeMigrations.sortedVersions.forEach(function(version, index) {
+                assertions.push({
+                    state: version,
+                    toBeMigrated: fakeMigrations.sortedVersions.slice(index+1)
+                });
+            });
+
+            assertions.forEach(function(dataset, index) {
+                it(`should execute correct set of migrations relative to current db state so that the db ends up in "up-to-date" state ${index}`, function() {
+                    this.sequelize.query.returns(Promise.resolve({}))
+                    this.fetchMigrationStateStub.returns(Promise.resolve(dataset.state));
+
+                    return this.mig.migrateCmd({
+                        'mig-dir': 'migrations'
+                    }).bind(this).then(function() {
+                        this.fetchMigrationStateStub.should.have.been.calledOnce;
+                        dataset.toBeMigrated.forEach(function(version, index) {
+                            this.Migrations.create.should.have.callCount(dataset.toBeMigrated.length);
+                            this.Migrations.create.should.have.been.always.calledBefore(this.sequelize.query);
+                            this.Migrations.create.should.have.been.calledWith({
+                                version: version,
+                                status: 'pending'
+                            });
+
+                            this.sequelize.query.getCall(index).args[0]
+                                .should.be.equal(fakeMigrations[version]);
+
+                            this.Migrations.update.should.have.callCount(dataset.toBeMigrated.length);
+                            this.Migrations.update.should.have.been.always.calledAfter(this.sequelize.query);
+                            this.Migrations.update.should.have.been.calledWith({
+                                status: 'ok'
+                            });
+                        }, this);
+                    });
+                });
+            });
+
+            it('should set migration status to the error state when a migration fails', function() {
+                const self = this;
+                const err = new Error('test error');
+                this.sequelize.query.throws(err);
+                this.fetchMigrationStateStub.returns(Promise.resolve('2.0.0-alpha'));
 
                 return this.mig.migrateCmd({
                     'mig-dir': 'migrations'
-                }).bind(this).then(function() {
-                    this.fetchMigrationStateStub.should.have.been.calledOnce;
-                    dataset.toBeMigrated.forEach(function(version, index) {
-                        this.sequelize.query.getCall(index).args[0]
-                            .should.be.equal(fakeMigrations[version]);
-                    }, this);
+                }).should.be.rejectedWith(err).then(function(error) {
+                    error.should.be.equal(err);
+                    self.fetchMigrationStateStub.should.have.been.calledOnce;
+                    self.Migrations.create.should.have.been.calledOnce;
+                    self.Migrations.create.should.have.been.calledBefore(self.sequelize.query);
+                    self.Migrations.create.should.have.been.calledWith({
+                        version: '2.0.0',
+                        status: 'pending'
+                    });
+
+                    self.sequelize.query.should.have.been.calledOnce;
+                    self.sequelize.query.getCall(0).args[0]
+                        .should.be.equal(fakeMigrations['2.0.0']);
+
+                    self.Migrations.update.should.have.been.calledOnce;
+                    self.Migrations.update.should.have.been.calledAfter(self.sequelize.query);
+                    self.Migrations.update.should.have.been.calledWith({
+                        status: 'error',
+                        note: err.message
+                    });
+                });
+            });
+
+            it('should return rejected Promise if migration fails to initialize', function() {
+                const self = this;
+                const err = new Error('test error');
+                this.Migrations.create.rejects(err);
+                this.fetchMigrationStateStub.returns(Promise.resolve('2.0.0-alpha'));
+
+                return this.mig.migrateCmd({
+                    'mig-dir': 'migrations'
+                }).should.be.rejected.then(function(error) {
+                    error.should.be.instanceof(MigrationError);
+                    self.fetchMigrationStateStub.should.have.been.calledOnce;
+                    self.Migrations.create.should.have.been.calledOnce;
+                    self.Migrations.create.should.have.been.calledWith({
+                        version: '2.0.0',
+                        status: 'pending'
+                    });
+
+                    self.sequelize.query.should.have.callCount(0);
+                    self.Migrations.update.should.have.callCount(0);
+                });
+            });
+        });
+
+        describe('', function() {
+            before(function() {
+                return this.initMigEnv('1.1.0').bind(this).then(function() {
+                    const mig = this.mig;
+                    const tmpDir = this.tmpDir;
+
+                    mig.config.set('sequelize', {
+                        host: 'unknown',
+                        port: 0,
+                        dialect: 'postgres',
+                        username: 'unknown',
+                        password: 'unknown',
+                        db: 'test'
+                    });
+
+                    this.sequelize = mig._getSequelize();
+                    const Migrations = this.sequelize.modelManager.getModel('migrations');
+                    sinon.stub(this.sequelize, 'query');
+                    sinon.stub(Migrations, 'create').returns(Promise.resolve({}));
+                    sinon.stub(Migrations, 'update').returns(Promise.resolve({}));
+
+                    this.fetchMigrationStateStub = sinon.stub(utils, 'fetchMigrationState');
+                    this.migratePlainSqlSpy = sinon.spy(utils, 'migratePlainSql');
+                    this.getSequelizeStub = sinon.stub(this.mig, '_getSequelize')
+                        .returns(this.sequelize)
+                });
+            });
+
+            after(function() {
+                this.fetchMigrationStateStub.restore();
+                this.getSequelizeStub.restore();
+                this.migratePlainSqlSpy.restore();
+                this.sequelize.query.restore();
+            });
+
+            it('should fail with an Error when valid ./migrations/ fs structure could not be verified', function() {
+                this.sequelize.query.returns(Promise.resolve({}))
+                this.fetchMigrationStateStub.returns(Promise.resolve(null));
+
+                return this.mig.migrateCmd({
+                    'mig-dir': 'migrations'
+                }).should.be.rejected.then(function(err) {
+                    err.message.should.match(/doesn't have valid "migrations" folder/);
                 });
             });
         });

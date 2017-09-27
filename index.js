@@ -1,7 +1,5 @@
 const Migration = require('./lib/migration.js');
 
-var CLI = false;
-
 module.exports           = cliInterface;
 module.exports.Migration = Migration;
 

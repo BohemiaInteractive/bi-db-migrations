@@ -1,8 +1,11 @@
 {
-    "name": "bi-service-sequelize-migrations",
-    "version": "0.3.1",
-    "description": "bi-service CLI plugin for db migrations",
+    "name": "bi-db-migrations",
+    "version": "0.4.0",
+    "description": "plain sql database schema & data migrations",
     "main": "index.js",
+    "bin": {
+        "bi-db-migrate": "./bin/db-migrate.js"
+    },
     "testFramework": "mocha",
     "author": "Bohemia Interactive",
     "contributors": [
@@ -15,6 +18,7 @@
     "license": "GPL-3.0",
     "files": [
         "index.js",
+        "bin",
         "lib",
         "LICENCE",
         "COPYRIGHT",
@@ -22,11 +26,12 @@
     ],
     "scripts": {
         "coverage": "./node_modules/istanbul/lib/cli.js cover ./node_modules/mocha/bin/_mocha -- --ui bdd -R spec -t 5000 'tests/**/*.js'",
-        "tests": "mocha --ui bdd --colors --globals verbose --check-leaks -t 5000 --reporter spec 'tests/**/*.js'",
+        "tests": "mocha --ui bdd --colors --check-leaks -t 5000 --reporter spec 'tests/**/*.js'",
         "test": "npm run tests"
     },
     "dependencies": {
         "bi-config": ">=2.0.0-alpha",
+        "yargs": "^8.0.0",
         "bluebird": "^3.4.6",
         "easy-table": "^1.0.0",
         "lodash": "^4.16.2",
@@ -36,7 +41,6 @@
     },
     "devDependencies": {
         "pg": "^4.5.0",
-        "yargs": "^8.0.0",
         "chai": "^4.1.2",
         "chai-as-promised": "^7.1.1",
         "istanbul": "^0.4.3",
