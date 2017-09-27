@@ -1,0 +1,26 @@
+DELIMITER $$
+DROP PROCEDURE IF EXISTS bi_db_migration_seeder $$
+
+CREATE PROCEDURE bi_db_migration_seeder()
+BEGIN
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+    -- DATA CHANGES
+    SET autocommit=0;
+    START TRANSACTION;
+        INSERT INTO app_type (id, name) VALUES (1, 'foreign');
+        INSERT INTO app_type (id, name) VALUES (2, 'native');
+        -- {require:app_type}
+        INSERT INTO app (id, name, app_type_id) VALUES ('test1', 'Arma 1', 1);
+        INSERT INTO app (id, name, app_type_id) VALUES ('test2', 'Arma 2', 2);
+        INSERT INTO app (id, name, app_type_id) VALUES ('test3', 'Arma 3', 2);
+
+    COMMIT;
+END $$
+
+CALL bi_db_migration_seeder() $$
+DROP PROCEDURE IF EXISTS bi_db_migration_seeder $$
+DELIMITER ;
