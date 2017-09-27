@@ -1,4 +1,4 @@
-## FUTURE
+## 0.4.1
 
 * [FIXED] - `bi-db-migrate` executable did not repond to any commands
 
