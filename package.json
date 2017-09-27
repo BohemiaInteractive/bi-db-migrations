@@ -21,6 +21,7 @@
         "bin",
         "lib",
         "LICENCE",
+        "README.md",
         "COPYRIGHT",
         "CHANGELOG.md"
     ],
