@@ -57,7 +57,7 @@ The generated migration file is placed in `migrations/${NPM_PACKAGE_VERSION}.sql
     mig.migrateCmd({/*options*/});
 ```
 
-The listed methods all return a `Promise` and are equal to functions which  
+The listed methods all return a `Promise` and are equal to functions that  
 are executed when using the `CLI` interface.
 
 
