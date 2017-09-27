@@ -1,4 +1,4 @@
-## FUTURE
+## 0.4.0
 
 * [CHANGED] - npm package name renamed to `bi-db-migrations`
 * [ADDED] - `bi-db-migrate` executable
