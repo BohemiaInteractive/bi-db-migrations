@@ -1,6 +1,6 @@
 {
     "name": "bi-service-sequelize-migrations",
-    "version": "0.3.0",
+    "version": "0.3.1",
     "description": "bi-service CLI plugin for db migrations",
     "main": "index.js",
     "testFramework": "mocha",
