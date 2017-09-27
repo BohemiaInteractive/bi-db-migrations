@@ -1,4 +1,4 @@
-## FUTURE
+## 0.3.0
 
 * [CHANGED] - API refactored so that all commands are wrapped into a `Migration` class so it's possible to construct multiple migration objects for multiple projects at once
 
