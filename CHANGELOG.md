@@ -1,3 +1,7 @@
+## 0.4.1
+
+* [FIXED] - `bi-db-migrate` executable did not repond to any commands
+
 ## 0.4.0
 
 * [CHANGED] - npm package name renamed to `bi-db-migrations`
