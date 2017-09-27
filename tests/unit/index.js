@@ -5,8 +5,15 @@ const chai           = require('chai');
 const sinon          = require('sinon');
 const chaiAsPromised = require('chai-as-promised');
 const sinonChai      = require("sinon-chai");
+const Sequelize      = require('sequelize');
 
-const utils = require('../../lib/util.js');
+const MigrationError   = require('../../lib/error/migrationError.js');
+const MigrationStatus  = require('../../lib/migrationStatus.js');
+const metaTableBuilder = require('../../lib/meta_table.js');
+const utils            = require('../../lib/util.js');
+
+global.Promise = Promise;
+
 //this makes sinon-as-promised available in sinon:
 require('sinon-as-promised');
 
@@ -165,6 +172,78 @@ describe('filterAndSortTables', function() {
             let sorted = utils.filterAndSortTables(dataset.input);
 
             this.assertArrayOrder(sorted, dataset.input, dataset.expectedOrder);
+        });
+    });
+});
+
+describe('fetchMigrationState', function() {
+    before(function() {
+        this.sequelize = new Sequelize('test', 'unknown', 'unknown', {
+            host: 'unknown',
+            port: 'unknwon',
+            dialect: 'postgres',
+        });
+
+        metaTableBuilder(this.sequelize, Sequelize.DataTypes);
+
+        this.Migrations = this.sequelize.modelManager.getModel('migrations');
+        this.findAllStub = sinon.stub(this.Migrations, 'findAll');
+        this.syncStub = sinon.stub(this.Migrations, 'sync');
+    });
+
+    beforeEach(function() {
+        this.findAllStub.reset();
+        this.syncStub.reset();
+    });
+
+    after(function() {
+        this.findAllStub.restore();
+        this.syncStub.restore();
+    });
+
+    it('should return the highest migrated version', function() {
+        this.findAllStub.resolves([
+            {version: '1.0.0-alpha'},
+            {version: '1.0.0'},
+            {version: '1.0.1'}
+        ]);
+
+        return utils.fetchMigrationState(this.Migrations).then(function(state) {
+            state.should.be.equal('1.0.1');
+        });
+    });
+
+    it('should return rejected Promise with MigrationError when there is a pending migration', function() {
+        this.findAllStub.resolves([
+            {version: '1.0.0-alpha'},
+            {version: '1.0.0', status: MigrationStatus.PENDING},
+            {version: '1.0.1'}
+        ]);
+
+        return utils.fetchMigrationState(this.Migrations).should.be.rejectedWith(MigrationError);
+    });
+
+    it('should attempt to create the migration meta table if it does not exist', function() {
+
+        const err = new Error('test error - table migrations does not exist');
+        err.original = {
+            code: '42P01'
+        };
+
+        this.findAllStub.onFirstCall().rejects(err);
+        this.findAllStub.onSecondCall().resolves([]);
+        this.syncStub.resolves();
+
+        return utils.fetchMigrationState(this.Migrations).then(function(state) {
+            expect(state).to.be.equal(null);
+        });
+    });
+
+    it('should return resolved promise with null when there have been no migrations yet', function() {
+        this.findAllStub.resolves([]);
+
+        return utils.fetchMigrationState(this.Migrations).then(function(state) {
+            expect(state).to.be.equal(null);
         });
     });
 });
