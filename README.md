@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/BohemiaInteractive/bi-db-migrations.svg?branch=master)](https://travis-ci.org/BohemiaInteractive/bi-db-migrations)  
+
 Relational database table schema & data migrations done with plain `SQL`.  
 With support of `semver` and `git` release tags the package provides means to
 comfortably maintain changes made to a database between individual software releases.
