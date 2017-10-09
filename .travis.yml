@@ -1,0 +1,10 @@
+language: node_js
+node_js:
+- "4.2.2"
+
+script:
+    - npm test
+
+env:
+  global:
+      - COMMIT_AUTHOR_EMAIL: "7884288+fogine@users.noreply.github.com"
