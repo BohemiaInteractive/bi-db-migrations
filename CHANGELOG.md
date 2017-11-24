@@ -1,4 +1,4 @@
-## FUTURE
+## 0.4.2
 
 * [FIXED] - incorrect failure when executing a command against a project with no `git` repository initialized
 
