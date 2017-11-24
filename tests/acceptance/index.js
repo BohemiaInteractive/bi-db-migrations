@@ -50,9 +50,12 @@ before(function() {
         }
     };
 
-    this.initMigEnv = function(pkgVersion) {
+    this.initMigEnv = function(pkgVersion, options) {
+        options = options || {git: true}
         this.tmpDir = tmp.dirSync({unsafeCleanup: true});
-        this.initGitRepo(this.tmpDir.name);
+        if (options.git) {
+            this.initGitRepo(this.tmpDir.name);
+        }
         this.mig = new Migration({
             root: this.tmpDir.name
         });
@@ -689,6 +692,43 @@ describe('acceptance', function() {
                 '1.0.0    error   2017-09-26 19:25  errormsg\n';
                 str.should.be.equal(expected);
             });
+        });
+    });
+
+    describe('no git repository', function() {
+        before(function() {
+            return this.initMigEnv('1.1.0', {
+                git: false
+            });
+        });
+
+        after(function() {
+            this.tmpDir.removeCallback();
+        });
+
+        it('should fail with an exit code 1 when no git repository is initialized', function() {
+            return this.mig.initSchemaCmd({
+                'mig-dir': 'migrations',
+                table: 'test'
+            }).should.be.rejected.then(function(err) {
+                err.message.should.match(/Failed to find git project root/);
+            });
+        });
+
+        it('should fail with an exit code 1 when no git repository is initialized (cli)', function() {
+            let result = childProcess.spawnSync(
+                path.resolve(__dirname + '/../../bin/db-migrate.js'),
+                ['init:schema', '-t', 'test'],
+                {cwd: this.tmpDir.name}
+            );
+
+            if (result.error) {
+                throw result.error;
+            } else if (result.status !== 0) {
+                result.stderr.toString().should.match(/Failed to find git project root/);
+            } else {
+                throw new Error('should have failed due to uninitialized git repository but was resolved with status:0');
+            }
         });
     });
 });

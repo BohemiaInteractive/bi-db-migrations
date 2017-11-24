@@ -1,3 +1,7 @@
+## FUTURE
+
+* [FIXED] - incorrect failure when executing a command against a project with no `git` repository initialized
+
 ## 0.4.1
 
 * [FIXED] - `bi-db-migrate` executable did not repond to any commands
