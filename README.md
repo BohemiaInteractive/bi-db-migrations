@@ -42,7 +42,9 @@ containing `SQL` commands which manipulate with table data (`INSERT`|`UPDATE`|`D
 
 At the time of a new release (before a new git tag is created), single pure `SQL` migration  
 script can be generated with the `init:migration` command (changes made to the tables since the last release are assembled in correct order and wrapped into a single transaction if possible).  
-The generated migration file is placed in `migrations/${NPM_PACKAGE_VERSION}.sql`
+The generated migration file is placed in `migrations/${NPM_PACKAGE_VERSION}.sql`  
+
+`Configuration` is fetched from `$PROJECT_ROOT/config/$NODE_ENV/config.json5#sequelize`
 
 
 ##### NodeJS module interface
