@@ -1,3 +1,7 @@
+## FUTURE
+
+* [FIXED] - generate proper readme file in the `migrations` directory as opposed to current empty file
+
 ## 0.4.2
 
 * [FIXED] - incorrect failure when executing a command against a project with no `git` repository initialized
