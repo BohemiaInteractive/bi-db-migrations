@@ -48,7 +48,7 @@ The generated migration file is placed in `migrations/${NPM_PACKAGE_VERSION}.sql
 ##### NodeJS module interface
 
 ```javascript
-    const Migration = require('bi-db-migrate');
+    const Migration = require('bi-db-migrations');
     const mig = new Migration.Migration({/*options*/});
 
     mig.initSeedCmd({/*options*/});
