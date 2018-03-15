@@ -1,3 +1,8 @@
+## 0.5.0
+
+* [FIXED] - generate proper readme file in the `migrations` directory as opposed to current empty file
+* [CHANGED] - postgres migrations are generated so that DDL and DML changes are interpolated as opposed to all DDL changes to tables being executed first (previous behavior)
+
 ## 0.4.2
 
 * [FIXED] - incorrect failure when executing a command against a project with no `git` repository initialized

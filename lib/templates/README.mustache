@@ -1,0 +1,23 @@
+FS structure:
+```bash
+../
+  src/
+    <table-name>/
+      schema.sql
+      data.sql
+  <migration-version>.sql #migration procedure per software release
+  ...
+```
+
+`migrations/src` folder contains source files the migration procedures (`<migration-version>.sql`) are generated from.  
+The generation of `<migration-version.sql>` happens only at the time of new software release and does NOT happen when the actual migration procedure is executed.  
+
+To migrate the software to the newest version, run:
+
+```bash
+project/root> export NODE_ENV='<environment-name>'
+project/root> ./node_modules/.bin/bi-service migrate
+```
+
+The command above will try to fetch current state of the software from database `migrations` table and will execute migration procedures for versions larger than the current state in the `migrations` table.  
+If the `migrations` table does not exist, the table will be created automaticatly and all migration procedures will be run in correct order.
