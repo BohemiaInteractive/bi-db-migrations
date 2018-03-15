@@ -1,11 +1,13 @@
 DO $$
     -- Start transaction immediately
     BEGIN
-    -- SCHEMA CHANGES
         CREATE TABLE app_type (
             id SERIAL PRIMARY KEY,
             name character varying(255),
         );
+
+        INSERT INTO app_type (id, name) VALUES (1, 'foreign');
+        INSERT INTO app_type (id, name) VALUES (2, 'native');
 
         -- {require:app_type}
         CREATE TABLE app (
@@ -13,10 +15,6 @@ DO $$
             name character varying(255),
             app_type_id integer,
         );
-
-    -- DATA CHANGES
-        INSERT INTO app_type (id, name) VALUES (1, 'foreign');
-        INSERT INTO app_type (id, name) VALUES (2, 'native');
 
         -- {require:app_type}
         INSERT INTO app (id, name, app_type_id) VALUES ('test1', 'Arma 1', 1);
