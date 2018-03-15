@@ -1,4 +1,4 @@
-## FUTURE
+## 0.5.0
 
 * [FIXED] - generate proper readme file in the `migrations` directory as opposed to current empty file
 * [CHANGED] - postgres migrations are generated so that DDL and DML changes are interpolated as opposed to all DDL changes to tables being executed first (previous behavior)
