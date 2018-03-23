@@ -510,6 +510,36 @@ describe('acceptance', function() {
                 });
             });
 
+            it('should execute correct set of migrations when we use the `genesis-version` option for the initial migration', function() {
+                this.sequelize.query.returns(Promise.resolve({}))
+                this.fetchMigrationStateStub.returns(Promise.resolve(null));
+                const toBeMigrated = fakeMigrations.sortedVersions.slice(3);
+
+                return this.mig.migrateCmd({
+                    'mig-dir': 'migrations',
+                    'genesis-version': fakeMigrations.sortedVersions[2]
+                }).bind(this).then(function() {
+                    this.fetchMigrationStateStub.should.have.been.calledOnce;
+                    toBeMigrated.forEach(function(version, index) {
+                        this.Migrations.create.should.have.callCount(toBeMigrated.length);
+                        this.Migrations.create.should.have.been.always.calledBefore(this.sequelize.query);
+                        this.Migrations.create.should.have.been.calledWith({
+                            version: version,
+                            status: 'pending'
+                        });
+
+                        this.sequelize.query.getCall(index).args[0]
+                            .should.be.equal(fakeMigrations[version]);
+
+                        this.Migrations.update.should.have.callCount(toBeMigrated.length);
+                        this.Migrations.update.should.have.been.always.calledAfter(this.sequelize.query);
+                        this.Migrations.update.should.have.been.calledWith({
+                            status: 'ok'
+                        });
+                    }, this);
+                });
+            });
+
             assertions.forEach(function(dataset, index) {
                 it(`should execute correct set of migrations relative to current db state so that the db ends up in "up-to-date" state ${index}`, function() {
                     this.sequelize.query.returns(Promise.resolve({}))
@@ -590,6 +620,25 @@ describe('acceptance', function() {
 
                     self.sequelize.query.should.have.callCount(0);
                     self.Migrations.update.should.have.callCount(0);
+                });
+            });
+
+            it('should return rejected Promise if invalid `genesis-version` option value is provided', function() {
+                return this.mig.migrateCmd({
+                    'mig-dir': 'migrations',
+                    'genesis-version': 'invalid'
+                }).bind(this).should.be.rejected.then(function(error) {
+                    error.message.should.match(/genesis-version must be a valid semver version string/);
+                });
+            });
+
+            it('should return rejected Promise if we try to use the `genesis-version` option on a database with known state', function() {
+                this.fetchMigrationStateStub.returns(Promise.resolve(fakeMigrations.sortedVersions[0]));
+                return this.mig.migrateCmd({
+                    'mig-dir': 'migrations',
+                    'genesis-version': '1.0.0'
+                }).bind(this).should.be.rejected.then(function(error) {
+                    error.message.should.match(/genesis-version can not be used for databases with known migration state/);
                 });
             });
         });

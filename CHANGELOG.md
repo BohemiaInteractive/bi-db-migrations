@@ -1,3 +1,7 @@
+## FUTURE
+
+* [ADDED] - new `--genesis-version` option to the `migrate` command
+
 ## 0.5.0
 
 * [FIXED] - generate proper readme file in the `migrations` directory as opposed to current empty file
