@@ -693,21 +693,34 @@ describe('acceptance', function() {
 
     describe('migrationStatusCmd', function() {
         before(function() {
-            const mig = new Migration();
-            this.mig = mig;
 
-            mig.config.set('sequelize', {
-                host: 'unknown',
-                port: 0,
-                dialect: 'postgres',
-                username: 'unknown',
-                password: 'unknown',
-                db: 'test'
+            return this.initMigEnv('1.0.0').bind(this).then(function() {
+                return utils.initFS(this.tmpDir.name, 'migrations');
+            }).then(function() {
+                const mig = this.mig;
+                const tmpDir = this.tmpDir;
+
+                mig.config.set('sequelize', {
+                    host: 'unknown',
+                    port: 0,
+                    dialect: 'postgres',
+                    username: 'unknown',
+                    password: 'unknown',
+                    db: 'test'
+                });
+
+                this.sequelize = mig._getSequelize();
+                this.Migrations = this.sequelize.modelManager.getModel('migrations');
+                sinon.stub(this.Migrations, 'findAll');
+
+                return Promise.map(['1.0.0', '1.1.0', '2.0.0'], function(version) {
+                    let ext = 'sql'
+                    ,   fPath;
+
+                    fPath = path.resolve(tmpDir.name + `/migrations/${version}.${ext}`);
+                    return fs.writeFileAsync(fPath, '');
+                });
             });
-
-            this.sequelize = mig._getSequelize();
-            this.Migrations = this.sequelize.modelManager.getModel('migrations');
-            sinon.stub(this.Migrations, 'findAll');
         });
 
         it('should return resolved promise with database migration state info', function() {
@@ -727,7 +740,8 @@ describe('acceptance', function() {
             ]));
 
             return this.mig.migrationStatusCmd({
-                limit: 10
+                limit: 10,
+                'mig-dir': 'migrations'
             }).bind(this).then(function(str) {
                 this.Migrations.findAll.should.have.been.calledOnce;
                 this.Migrations.findAll.should.have.been.calledWith({
@@ -740,6 +754,40 @@ describe('acceptance', function() {
                 '2.0.0    ok      2017-09-26 19:25  note    \n' +
                 '1.0.0    error   2017-09-26 19:25  errormsg\n';
                 str.should.be.equal(expected);
+            });
+        });
+
+        it('should return resolved promise with migration state and list of verions to be migrated', function() {
+            this.Migrations.findAll.returns(Promise.resolve([
+                {
+                    created_at : '2017-09-26 19:25',
+                    version    : '1.0.0',
+                    status     : 'ok',
+                    note       : 'note'
+                }
+            ]));
+
+            return this.mig.migrationStatusCmd({
+                limit: 10,
+                'mig-dir': 'migrations'
+            }).bind(this).then(function(str) {
+                let expected =
+                'version  status  created_at        note\n' +
+                '-------  ------  ----------------  ----\n' +
+                '1.0.0    ok      2017-09-26 19:25  note\n\n\n' +
+                'Versions to be migrated: 1.1.0 & 2.0.0';
+                str.should.be.equal(expected);
+            });
+        });
+
+        it('should return resolved promise with verions to be migrated in the next migration', function() {
+            this.Migrations.findAll.returns(Promise.resolve([]));
+
+            return this.mig.migrationStatusCmd({
+                limit: 10,
+                'mig-dir': 'migrations'
+            }).bind(this).then(function(str) {
+                str.should.be.equal('\n\nVersions to be migrated: 1.0.0 & 1.1.0 & 2.0.0');
             });
         });
     });

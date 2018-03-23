@@ -1,6 +1,7 @@
 ## FUTURE
 
 * [ADDED] - new `--genesis-version` option to the `migrate` command
+* [ADDED] - `mig:status` command prints info about which verions are about to be migrated
 
 ## 0.5.0
 
