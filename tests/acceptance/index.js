@@ -790,6 +790,33 @@ describe('acceptance', function() {
                 str.should.be.equal('\n\nVersions to be migrated: 1.0.0 & 1.1.0 & 2.0.0');
             });
         });
+
+        [{
+            dialect: 'postgres',
+            code: '42P01'
+        }, {
+            dialect: 'mysql',
+            code: '1146'
+        }].forEach(function(options, index) {
+            it(`should return resolved promise with verions to be migrated in the next migration when no "migrations" table exists ${index}`, function() {
+                delete this.mig.sequelize;
+                this.mig.config.set('sequelize:dialect', options.dialect);
+
+                const err = new Error('testing error');
+                err.original = {code: options.code};
+
+                const Migrations = this.mig._getSequelize().modelManager.getModel('migrations');
+                sinon.stub(Migrations, 'findAll');
+                Migrations.findAll.rejects(err);
+
+                return this.mig.migrationStatusCmd({
+                    limit: 10,
+                    'mig-dir': 'migrations'
+                }).bind(this).then(function(str) {
+                    str.should.be.equal('\n\nVersions to be migrated: 1.0.0 & 1.1.0 & 2.0.0');
+                });
+            });
+        });
     });
 
     describe('no git repository', function() {
