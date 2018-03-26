@@ -1,3 +1,9 @@
+## 0.6.0
+
+* [ADDED] - new `--genesis-version` option to the `migrate` command
+* [ADDED] - `mig:status` command prints info about which verions are about to be migrated
+* [CHANGED] - `mig:status` does not fail with an error if `migrations` db table does not exists - it just prints versions which will be migrated
+
 ## 0.5.0
 
 * [FIXED] - generate proper readme file in the `migrations` directory as opposed to current empty file

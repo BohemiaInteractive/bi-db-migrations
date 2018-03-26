@@ -62,7 +62,13 @@ function cliInterface(yargs, strict) {
             type: 'number'
         },
     }, mig.migrationStatusCmd.bind(mig))
-    .command(['migrate'], 'Run pending migrations', {}, mig.migrateCmd.bind(mig))
+    .command(['migrate'], 'Run pending migrations', {
+        'genesis-version': {
+            describe: 'semver version. Applies only for the first initial migration' +
+            ' for databases with data already in place and implies what version state should be considered the database is currently at',
+            type: 'string'
+        }
+    }, mig.migrateCmd.bind(mig))
     .command(['seed'], 'Run seeder for specified table', {
         table: {
             alias: 't',

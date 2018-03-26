@@ -510,6 +510,36 @@ describe('acceptance', function() {
                 });
             });
 
+            it('should execute correct set of migrations when we use the `genesis-version` option for the initial migration', function() {
+                this.sequelize.query.returns(Promise.resolve({}))
+                this.fetchMigrationStateStub.returns(Promise.resolve(null));
+                const toBeMigrated = fakeMigrations.sortedVersions.slice(3);
+
+                return this.mig.migrateCmd({
+                    'mig-dir': 'migrations',
+                    'genesis-version': fakeMigrations.sortedVersions[2]
+                }).bind(this).then(function() {
+                    this.fetchMigrationStateStub.should.have.been.calledOnce;
+                    toBeMigrated.forEach(function(version, index) {
+                        this.Migrations.create.should.have.callCount(toBeMigrated.length);
+                        this.Migrations.create.should.have.been.always.calledBefore(this.sequelize.query);
+                        this.Migrations.create.should.have.been.calledWith({
+                            version: version,
+                            status: 'pending'
+                        });
+
+                        this.sequelize.query.getCall(index).args[0]
+                            .should.be.equal(fakeMigrations[version]);
+
+                        this.Migrations.update.should.have.callCount(toBeMigrated.length);
+                        this.Migrations.update.should.have.been.always.calledAfter(this.sequelize.query);
+                        this.Migrations.update.should.have.been.calledWith({
+                            status: 'ok'
+                        });
+                    }, this);
+                });
+            });
+
             assertions.forEach(function(dataset, index) {
                 it(`should execute correct set of migrations relative to current db state so that the db ends up in "up-to-date" state ${index}`, function() {
                     this.sequelize.query.returns(Promise.resolve({}))
@@ -592,6 +622,25 @@ describe('acceptance', function() {
                     self.Migrations.update.should.have.callCount(0);
                 });
             });
+
+            it('should return rejected Promise if invalid `genesis-version` option value is provided', function() {
+                return this.mig.migrateCmd({
+                    'mig-dir': 'migrations',
+                    'genesis-version': 'invalid'
+                }).bind(this).should.be.rejected.then(function(error) {
+                    error.message.should.match(/genesis-version must be a valid semver version string/);
+                });
+            });
+
+            it('should return rejected Promise if we try to use the `genesis-version` option on a database with known state', function() {
+                this.fetchMigrationStateStub.returns(Promise.resolve(fakeMigrations.sortedVersions[0]));
+                return this.mig.migrateCmd({
+                    'mig-dir': 'migrations',
+                    'genesis-version': '1.0.0'
+                }).bind(this).should.be.rejected.then(function(error) {
+                    error.message.should.match(/genesis-version can not be used for databases with known migration state/);
+                });
+            });
         });
 
         describe('', function() {
@@ -644,21 +693,34 @@ describe('acceptance', function() {
 
     describe('migrationStatusCmd', function() {
         before(function() {
-            const mig = new Migration();
-            this.mig = mig;
 
-            mig.config.set('sequelize', {
-                host: 'unknown',
-                port: 0,
-                dialect: 'postgres',
-                username: 'unknown',
-                password: 'unknown',
-                db: 'test'
+            return this.initMigEnv('1.0.0').bind(this).then(function() {
+                return utils.initFS(this.tmpDir.name, 'migrations');
+            }).then(function() {
+                const mig = this.mig;
+                const tmpDir = this.tmpDir;
+
+                mig.config.set('sequelize', {
+                    host: 'unknown',
+                    port: 0,
+                    dialect: 'postgres',
+                    username: 'unknown',
+                    password: 'unknown',
+                    db: 'test'
+                });
+
+                this.sequelize = mig._getSequelize();
+                this.Migrations = this.sequelize.modelManager.getModel('migrations');
+                sinon.stub(this.Migrations, 'findAll');
+
+                return Promise.map(['1.0.0', '1.1.0', '2.0.0'], function(version) {
+                    let ext = 'sql'
+                    ,   fPath;
+
+                    fPath = path.resolve(tmpDir.name + `/migrations/${version}.${ext}`);
+                    return fs.writeFileAsync(fPath, '');
+                });
             });
-
-            this.sequelize = mig._getSequelize();
-            this.Migrations = this.sequelize.modelManager.getModel('migrations');
-            sinon.stub(this.Migrations, 'findAll');
         });
 
         it('should return resolved promise with database migration state info', function() {
@@ -678,7 +740,8 @@ describe('acceptance', function() {
             ]));
 
             return this.mig.migrationStatusCmd({
-                limit: 10
+                limit: 10,
+                'mig-dir': 'migrations'
             }).bind(this).then(function(str) {
                 this.Migrations.findAll.should.have.been.calledOnce;
                 this.Migrations.findAll.should.have.been.calledWith({
@@ -691,6 +754,67 @@ describe('acceptance', function() {
                 '2.0.0    ok      2017-09-26 19:25  note    \n' +
                 '1.0.0    error   2017-09-26 19:25  errormsg\n';
                 str.should.be.equal(expected);
+            });
+        });
+
+        it('should return resolved promise with migration state and list of verions to be migrated', function() {
+            this.Migrations.findAll.returns(Promise.resolve([
+                {
+                    created_at : '2017-09-26 19:25',
+                    version    : '1.0.0',
+                    status     : 'ok',
+                    note       : 'note'
+                }
+            ]));
+
+            return this.mig.migrationStatusCmd({
+                limit: 10,
+                'mig-dir': 'migrations'
+            }).bind(this).then(function(str) {
+                let expected =
+                'version  status  created_at        note\n' +
+                '-------  ------  ----------------  ----\n' +
+                '1.0.0    ok      2017-09-26 19:25  note\n\n\n' +
+                'Versions to be migrated: 1.1.0 & 2.0.0';
+                str.should.be.equal(expected);
+            });
+        });
+
+        it('should return resolved promise with verions to be migrated in the next migration', function() {
+            this.Migrations.findAll.returns(Promise.resolve([]));
+
+            return this.mig.migrationStatusCmd({
+                limit: 10,
+                'mig-dir': 'migrations'
+            }).bind(this).then(function(str) {
+                str.should.be.equal('\n\nVersions to be migrated: 1.0.0 & 1.1.0 & 2.0.0');
+            });
+        });
+
+        [{
+            dialect: 'postgres',
+            code: '42P01'
+        }, {
+            dialect: 'mysql',
+            code: '1146'
+        }].forEach(function(options, index) {
+            it(`should return resolved promise with verions to be migrated in the next migration when no "migrations" table exists ${index}`, function() {
+                delete this.mig.sequelize;
+                this.mig.config.set('sequelize:dialect', options.dialect);
+
+                const err = new Error('testing error');
+                err.original = {code: options.code};
+
+                const Migrations = this.mig._getSequelize().modelManager.getModel('migrations');
+                sinon.stub(Migrations, 'findAll');
+                Migrations.findAll.rejects(err);
+
+                return this.mig.migrationStatusCmd({
+                    limit: 10,
+                    'mig-dir': 'migrations'
+                }).bind(this).then(function(str) {
+                    str.should.be.equal('\n\nVersions to be migrated: 1.0.0 & 1.1.0 & 2.0.0');
+                });
             });
         });
     });
