@@ -723,6 +723,10 @@ describe('acceptance', function() {
             });
         });
 
+        beforeEach(function() {
+            this.Migrations.findAll.reset();
+        });
+
         it('should return resolved promise with database migration state info', function() {
             this.Migrations.findAll.returns(Promise.resolve([
                 {
@@ -741,11 +745,13 @@ describe('acceptance', function() {
 
             return this.mig.migrationStatusCmd({
                 limit: 10,
+                json: false,
                 'mig-dir': 'migrations'
             }).bind(this).then(function(str) {
                 this.Migrations.findAll.should.have.been.calledOnce;
                 this.Migrations.findAll.should.have.been.calledWith({
                         order: [['id', 'DESC']],
+                        raw: true,
                         limit: 10
                 });
                 let expected =
@@ -754,6 +760,44 @@ describe('acceptance', function() {
                 '2.0.0    ok      2017-09-26 19:25  note    \n' +
                 '1.0.0    error   2017-09-26 19:25  errormsg\n';
                 str.should.be.equal(expected);
+            });
+        });
+
+        it('should return resolved promise with database migration state info in json format', function() {
+            this.Migrations.findAll.returns(Promise.resolve([
+                {
+                    created_at : '2017-09-26 19:25',
+                    version    : '2.0.0',
+                    status     : 'ok',
+                    note       : 'note'
+                },
+                {
+                    created_at : '2017-09-26 19:25',
+                    version    : '1.0.0',
+                    status     : 'error',
+                    note       : 'errormsg'
+                }
+            ]));
+
+            return this.mig.migrationStatusCmd({
+                limit: 10,
+                json: true,
+                'mig-dir': 'migrations'
+            }).bind(this).then(function(status) {
+                this.Migrations.findAll.should.have.been.calledOnce;
+                this.Migrations.findAll.should.have.been.calledWith({
+                        order: [['id', 'DESC']],
+                        raw: true,
+                        limit: 10
+                });
+
+                status.should.be.eql({
+                    history: [
+                        {version: '2.0.0', status: 'ok', created_at: '2017-09-26 19:25', note: 'note'},
+                        {version: '1.0.0', status: 'error', created_at: '2017-09-26 19:25', note: 'errormsg'},
+                    ],
+                    toBeMigrated: []
+                });
             });
         });
 
@@ -769,6 +813,7 @@ describe('acceptance', function() {
 
             return this.mig.migrationStatusCmd({
                 limit: 10,
+                json: false,
                 'mig-dir': 'migrations'
             }).bind(this).then(function(str) {
                 let expected =
@@ -780,11 +825,35 @@ describe('acceptance', function() {
             });
         });
 
+        it('should return resolved promise with migration state and list of verions to be migrated in json format', function() {
+            this.Migrations.findAll.returns(Promise.resolve([
+                {
+                    created_at : '2017-09-26 19:25',
+                    version    : '1.0.0',
+                    status     : 'ok',
+                    note       : 'note'
+                }
+            ]));
+
+            return this.mig.migrationStatusCmd({
+                limit: 10,
+                'mig-dir': 'migrations'
+            }).bind(this).then(function(status) {
+                status.should.be.eql({
+                    history: [
+                        {version: '1.0.0', status: 'ok', created_at: '2017-09-26 19:25', note: 'note'},
+                    ],
+                    toBeMigrated: [{version: '1.1.0'}, {version: '2.0.0'}]
+                });
+            });
+        });
+
         it('should return resolved promise with verions to be migrated in the next migration', function() {
             this.Migrations.findAll.returns(Promise.resolve([]));
 
             return this.mig.migrationStatusCmd({
                 limit: 10,
+                json: false,
                 'mig-dir': 'migrations'
             }).bind(this).then(function(str) {
                 str.should.be.equal('\n\nVersions to be migrated: 1.0.0 & 1.1.0 & 2.0.0');
@@ -811,6 +880,7 @@ describe('acceptance', function() {
 
                 return this.mig.migrationStatusCmd({
                     limit: 10,
+                    json: false,
                     'mig-dir': 'migrations'
                 }).bind(this).then(function(str) {
                     str.should.be.equal('\n\nVersions to be migrated: 1.0.0 & 1.1.0 & 2.0.0');
