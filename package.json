@@ -1,6 +1,6 @@
 {
   "name": "bi-db-migrations",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "plain sql database schema & data migrations",
   "main": "index.js",
   "bin": {
