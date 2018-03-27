@@ -1,3 +1,7 @@
+## FUTURE
+
+* [FIXED] handle errors gracefully for `init:migration` & `init:schema` & `init:seed` commands
+
 ## 0.6.2
 
 * [FIXED] `--json` option of the `mig:status` command printed invalid json when executed as cli shell command
