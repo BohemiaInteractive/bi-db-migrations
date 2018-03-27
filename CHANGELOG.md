@@ -1,3 +1,7 @@
+## 0.6.1
+
+* [ADDED] `--json` option to the `mig:status` command which will dump data in json format
+
 ## 0.6.0
 
 * [ADDED] - new `--genesis-version` option to the `migrate` command

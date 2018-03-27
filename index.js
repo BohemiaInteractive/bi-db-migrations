@@ -61,6 +61,11 @@ function cliInterface(yargs, strict) {
             default: 2,
             type: 'number'
         },
+        json: {
+            describe: 'Dumps data in json format',
+            default: false,
+            type: 'boolean'
+        },
     }, mig.migrationStatusCmd.bind(mig))
     .command(['migrate'], 'Run pending migrations', {
         'genesis-version': {
