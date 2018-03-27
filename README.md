@@ -33,7 +33,7 @@ migrations/
   ...
 ```
 
-`migrations/src` folder contains directories (database tables) each with a file 
+`migrations/src` folder contains directories (database tables) maintained by the user each with a file 
 named `schema.sql` which initiallly contains `SQL` command creating the table  
 and later grows with changes being made to the schema (new commands ALTERING the table are added to the `schema.sql` as new lines).  
 
@@ -41,8 +41,8 @@ Alongside the `schema.sql` file, there may be optional `data.sql` file
 containing `SQL` commands which manipulate with table data (`INSERT`|`UPDATE`|`DELETE`).
 
 At the time of a new release (before a new git tag is created), single pure `SQL` migration  
-script can be generated with the `init:migration` command (changes made to the tables since the last release are assembled in correct order and wrapped into a single transaction if possible).  
-The generated migration file is placed in `migrations/${NPM_PACKAGE_VERSION}.sql`  
+script should be generated with the `init:migration` command (changes made to the tables since the last release are assembled in correct order and wrapped into a single transaction if possible).  
+The generated migration file is placed in `migrations/${NPM_PACKAGE_VERSION}.sql` and should be checked-in in `git`  
 
 `Configuration` is fetched from `$PROJECT_ROOT/config/$NODE_ENV/config.json5#sequelize`
 
