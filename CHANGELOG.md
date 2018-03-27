@@ -1,3 +1,8 @@
+## 0.6.2
+
+* [FIXED] `--json` option of the `mig:status` command printed invalid json when executed as cli shell command
+* [FIXED] `migrate` & `seed` & `mig:status` commands should not require `project-root/migrations/src` directory to be present
+
 ## 0.6.1
 
 * [ADDED] `--json` option to the `mig:status` command which will dump data in json format
