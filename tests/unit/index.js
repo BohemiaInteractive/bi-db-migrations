@@ -9,6 +9,7 @@ const Sequelize      = require('sequelize');
 
 const MigrationError   = require('../../lib/error/migrationError.js');
 const MigrationStatus  = require('../../lib/migrationStatus.js');
+const Migration        = require('../../lib/migration.js');
 const metaTableBuilder = require('../../lib/meta_table.js');
 const utils            = require('../../lib/util.js');
 
@@ -244,6 +245,120 @@ describe('fetchMigrationState', function() {
 
         return utils.fetchMigrationState(this.Migrations).then(function(state) {
             expect(state).to.be.equal(null);
+        });
+    });
+});
+
+describe('Migration', function() {
+    describe('_exit', function() {
+        describe('migration.CLI = true', function() {
+            before(function() {
+                this.mig = new Migration({});
+                this.mig.CLI = true;
+
+                this.consoleInfoStub = sinon.stub(console, 'info');
+                this.consoleErrorStub = sinon.stub(console, 'error');
+                this.processExitStub = sinon.stub(process, 'exit');
+            });
+
+            beforeEach(function() {
+                this.consoleInfoStub.reset();
+                this.consoleErrorStub.reset();
+                this.processExitStub.reset();
+            });
+
+            after(function() {
+                this.consoleInfoStub.restore();
+                this.consoleErrorStub.restore();
+                this.processExitStub.restore();
+            });
+
+            [0, 1].forEach(function(exitCode) {
+                it(`should exit with status code ${exitCode}`, function() {
+                    this.mig._exit('message', exitCode);
+                    this.processExitStub.should.have.been.calledOnce;
+                    this.processExitStub.should.have.been.calledWith(exitCode);
+                });
+            });
+
+            [
+                {output: 'stdout', code: 0, stub: 'consoleInfoStub'},
+                {output: 'stderr', code: 1, stub: 'consoleErrorStub'},
+            ].forEach(function(options) {
+                it(`should dump valid json to ${options.output}`, function() {
+                    let data = {testing: 'data', arr: [1,2]};
+                    this.mig._exit(data, options.code);
+                    this[options.stub].should.have.been.calledOnce;
+                    this[options.stub].should.have.been.calledWith(
+                        JSON.stringify(data, null, 2)
+                    );
+                });
+
+                it(`should dump a string to ${options.output}`, function() {
+                    let message = 'testing message';
+                    this.mig._exit(message, options.code);
+                    this[options.stub].should.have.been.calledOnce;
+                    this[options.stub].should.have.been.calledWith(message);
+                });
+
+                it(`should dump an Error in string format to ${options.output}`, function() {
+                    let err = new Error('error test');
+                    this.mig._exit(err, options.code);
+                    this[options.stub].should.have.been.calledOnce;
+                    this[options.stub].should.have.been.calledWith('Error: error test');
+                });
+
+                it(`should dump an Error in json format to ${options.output}`, function() {
+                    let err = new Error('error test');
+                    err.toJSON = function toJSON() {
+                        return {
+                            message: this.message
+                        };
+                    };
+
+                    this.mig._exit(err, options.code);
+                    this[options.stub].should.have.been.calledOnce;
+                    this[options.stub].should.have.been.calledWith({message: err.message});
+                });
+            });
+        });
+
+        describe('migration.CLI != true', function() {
+            before(function() {
+                this.mig = new Migration({});
+            });
+
+            it('should return what was given to it as a message argument when exit code == 0', function() {
+                ['message', {message: 'message'}, new Error('message')].forEach(function(data) {
+                    this.mig._exit(data, 0).should.be.equal(data);
+                }, this);
+            });
+
+            it('should throw received Error object if exit code > 0', function() {
+                let err = new Error('message');
+                let mig = this.mig;
+
+                [1,2,3,4,5,6].forEach(function(exitCode) {
+                    function testCase() {
+                        mig._exit(err, exitCode);
+                    }
+
+                    expect(testCase).to.throw(err);
+                });
+            });
+
+            it('should throw an Error if exit code > 0 and error message was given as first arg', function() {
+                let err = 'message';
+                let mig = this.mig;
+
+                [1,2,3,4,5,6].forEach(function(exitCode) {
+                    function testCase() {
+                        mig._exit(err, exitCode);
+                    }
+
+                    expect(testCase).to.throw('message');
+                });
+            });
         });
     });
 });

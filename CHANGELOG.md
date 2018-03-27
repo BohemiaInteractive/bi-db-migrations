@@ -1,3 +1,7 @@
+## FUTURE
+
+* [FIXED] `--json` option of the `mig:status` command printed invalid json when executed as cli shell command
+
 ## 0.6.1
 
 * [ADDED] `--json` option to the `mig:status` command which will dump data in json format
