@@ -91,7 +91,7 @@ function cliInterface(yargs, strict) {
     })
     .option('interactive', {
         alias: 'i',
-        describe: 'if not enabled, it will NOT prompt the user for anything.',
+        describe: 'opens related file with your $EDITOR or prompts for confirmation depending on the context',
         default: false,
         global: true,
         type: 'boolean'

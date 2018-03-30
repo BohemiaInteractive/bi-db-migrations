@@ -62,7 +62,24 @@ The generated migration file is placed in `migrations/${NPM_PACKAGE_VERSION}.sql
 ```
 
 The listed methods all return a `Promise` and are equal to functions that  
-are executed when using the `CLI` interface.
+are executed when using the `CLI` interface - meaning the methods take the same options as well.
+
+###### migrationStatusCmd
+
+When fulfilled, returns a map object with `history` & `toBeMigrated` ordered lists
+which consist of migration log and migrations to be executed in the next `migrate` call respectively:  
+
+```js
+{
+    history: [
+        {version: '1.0.0', status: 'error', note: 'reason', created_at: 'date'},
+        {version: '1.0.0', status: 'ok', note: null, created_at: 'date'},
+    ],
+    toBeMigrated: [
+        {version: '2.0.0'}
+    ]
+}
+```
 
 
 ##### CLI interface
@@ -85,6 +102,9 @@ Options:
   --interactive, -i  if not enabled, it will NOT prompt the user for anything.                                   [boolean] [default: false]
   --verbose, -v      Dumps more info to stdout                                                                   [count] [default: 1]
   -h, --help         Show help                                                                                   [boolean]
+
+#To list options of individual commands
+> bi-db-migrate <command> --help
 ```
 
 
