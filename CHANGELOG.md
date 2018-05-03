@@ -1,6 +1,8 @@
 ## FUTURE
 
 * [FIXED] handle errors gracefully for `init:migration` & `init:schema` & `init:seed` commands
+* [FIXED] incorrectly handled failure due to non-existing `migrations` table for mysql provider (incorrect error code checking)
+* [FIXED] mysql provider should be initialized with the `multipleStatements=true` option
 
 ## 0.6.2
 
