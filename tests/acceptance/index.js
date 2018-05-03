@@ -865,14 +865,18 @@ describe('acceptance', function() {
             code: '42P01'
         }, {
             dialect: 'mysql',
-            code: '1146'
+            errno: '1146'
         }].forEach(function(options, index) {
             it(`should return resolved promise with verions to be migrated in the next migration when no "migrations" table exists ${index}`, function() {
                 delete this.mig.sequelize;
                 this.mig.config.set('sequelize:dialect', options.dialect);
 
                 const err = new Error('testing error');
-                err.original = {code: options.code};
+                if (options.code) {
+                    err.original = {code: options.code};
+                } else if(options.errno) {
+                    err.original = {errno: options.errno};
+                }
 
                 const Migrations = this.mig._getSequelize().modelManager.getModel('migrations');
                 sinon.stub(Migrations, 'findAll');
