@@ -1,13 +1,3 @@
-DELIMITER $$
-DROP PROCEDURE IF EXISTS bi_db_migration_seeder $$
-
-CREATE PROCEDURE bi_db_migration_seeder()
-BEGIN
-    DECLARE EXIT HANDLER FOR SQLEXCEPTION
-    BEGIN
-        ROLLBACK;
-        RESIGNAL;
-    END;
     -- DATA CHANGES
     SET autocommit=0;
     START TRANSACTION;
@@ -19,8 +9,3 @@ BEGIN
         INSERT INTO app (id, name, app_type_id) VALUES ('test3', 'Arma 3', 2);
 
     COMMIT;
-END $$
-
-CALL bi_db_migration_seeder() $$
-DROP PROCEDURE IF EXISTS bi_db_migration_seeder $$
-DELIMITER ;

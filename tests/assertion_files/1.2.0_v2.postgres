@@ -3,13 +3,13 @@ DO $$
     BEGIN
         CREATE TABLE app_type (
             id SERIAL PRIMARY KEY,
-            name character varying(255),
+            name character varying(255)
         );
 
         -- {require:app_type}
         CREATE TABLE app (
             id SERIAL PRIMARY KEY,
-            app_type_id integer,
+            app_type_id integer
         );
 
     END

@@ -24,91 +24,7 @@ chai.use(chaiAsPromised);
 const Migration      = require('../../lib/migration.js');
 const utils          = require('../../lib/util.js');
 const MigrationError = require('../../lib/error/migrationError.js');
-
-before(function() {
-    this.spawnSync = function(cmd, args, options) {
-        let result = childProcess.spawnSync(cmd, args, options);
-
-        if (result.status !== 0) {
-            throw new Error(`${cmd} ${args.join(' ')} exited with status code ${result.status}. ${result.stderr && result.stderr.toString()}`)
-        }
-
-        if (result.error) {
-            throw result.error;
-        }
-
-        return result.stdout;
-    };
-
-    this.initGitRepo = function(dir) {
-        let result = childProcess.spawnSync('git', ['init'], {cwd: dir});
-
-        if (result.error) {
-            throw gitStatus.error;
-        } else if (result.status !== 0) {
-            throw new Error('`git init` exited with status: ' + result.status);
-        }
-    };
-
-    this.initMigEnv = function(pkgVersion, options) {
-        options = options || {git: true}
-        this.tmpDir = tmp.dirSync({unsafeCleanup: true});
-        if (options.git) {
-            this.initGitRepo(this.tmpDir.name);
-        }
-        this.mig = new Migration({
-            root: this.tmpDir.name
-        });
-
-        let pkg = '{"name": "test", "version": "'+pkgVersion+'"}';
-
-        this.packagePath = path.resolve(this.tmpDir.name + `/package.json`);
-        return fs.writeFileAsync(this.packagePath, pkg);
-    };
-
-    this.createMigrationDevDbFiles = function(mig, root) {
-        let optApp = {
-            table: 'app',
-            'mig-dir': 'migrations',
-            require: ['app_type']
-        };
-
-        let optAppType = {
-            table: 'app_type',
-            'mig-dir': 'migrations',
-            require: []
-        };
-
-        let migSrcPath =  path.resolve(root + `/migrations/src/`);
-
-        return Promise.all([
-            mig.initSchemaCmd(optApp),
-            mig.initSeedCmd(optApp),
-            mig.initSchemaCmd(optAppType),
-            mig.initSeedCmd(optAppType),
-        ]).then(function() {
-            let appSchemaData     = fs.readFileSync(path.resolve(__dirname + '/../data/app/schema.sql'));
-            let appSeedData       = fs.readFileSync(path.resolve(__dirname + '/../data/app/data.sql'));
-            let appTypeSchemaData = fs.readFileSync(path.resolve(__dirname + '/../data/app_type/schema.sql'));
-            let appTypeSeedData   = fs.readFileSync(path.resolve(__dirname + '/../data/app_type/data.sql'));
-
-            let fdAppSchema     = fs.openSync(migSrcPath + '/app/schema.sql', 'a');
-            let fdAppSeed       = fs.openSync(migSrcPath + '/app/data.sql', 'a');
-            let fdAppTypeSchema = fs.openSync(migSrcPath + '/app_type/schema.sql', 'a');
-            let fdAppTypeSeed   = fs.openSync(migSrcPath + '/app_type/data.sql', 'a');
-
-            fs.writeSync(fdAppSchema, appSchemaData.toString());
-            fs.writeSync(fdAppSeed, appSeedData.toString());
-            fs.writeSync(fdAppTypeSchema, appTypeSchemaData.toString());
-            fs.writeSync(fdAppTypeSeed, appTypeSeedData.toString());
-
-            fs.closeSync(fdAppSchema);
-            fs.closeSync(fdAppSeed);
-            fs.closeSync(fdAppTypeSchema);
-            fs.closeSync(fdAppTypeSeed);
-        });
-    };
-});
+const testUtils      = require('../utils.js');
 
 describe('acceptance', function() {
     before(function() {
@@ -121,7 +37,7 @@ describe('acceptance', function() {
     }, function(fName, methodName) {
         describe(methodName, function() {
             before(function() {
-                return this.initMigEnv('1.1.0');
+                return testUtils.initMigEnv.call(this, '1.1.0');
             });
 
             after(function() {
@@ -170,8 +86,8 @@ describe('acceptance', function() {
     describe('initMigrationCmd', function() {
         describe('no release tag created yet', function() {
             before(function() {
-                return this.initMigEnv('1.1.0').bind(this).then(function() {
-                    return this.createMigrationDevDbFiles(this.mig, this.tmpDir.name);
+                return testUtils.initMigEnv.call(this, '1.1.0').bind(this).then(function() {
+                    return testUtils.createMigrationDevDbFiles.call(this, this.mig, this.tmpDir.name);
                 });
             });
 
@@ -220,8 +136,8 @@ describe('acceptance', function() {
 
         describe('semver release git tag already exists with a migration sql script', function() {
             before(function() {
-                return this.initMigEnv('1.1.0').bind(this).then(function() {
-                    return this.createMigrationDevDbFiles(this.mig, this.tmpDir.name);
+                return testUtils.initMigEnv.call(this, '1.1.0').bind(this).then(function() {
+                    return testUtils.createMigrationDevDbFiles.call(this, this.mig, this.tmpDir.name);
                 }).then(function() {
                     return this.mig.initMigrationCmd({
                         'mig-dir': 'migrations',
@@ -229,18 +145,18 @@ describe('acceptance', function() {
                         dialect: 'postgres'
                     });
                 }).then(function() {
-                    this.spawnSync('git', [
+                    testUtils.spawnSync.call(this, 'git', [
                         'add',
                         'migrations'
                     ], {cwd: this.tmpDir.name});
 
-                    this.spawnSync('git', [
+                    testUtils.spawnSync.call(this, 'git', [
                         'commit',
                         '-m',
                         'initial'
                     ], {cwd: this.tmpDir.name});
 
-                    this.spawnSync('git', [
+                    testUtils.spawnSync.call(this, 'git', [
                         'tag',
                         '-a',
                         '1.1.0',
@@ -307,7 +223,7 @@ describe('acceptance', function() {
                         '-- {require:app_type}\n' +
                         'CREATE TABLE app (\n' +
                         '    id SERIAL PRIMARY KEY,\n' +
-                        '    app_type_id integer,\n' +
+                        '    app_type_id integer\n' +
                         ');\n'
                     );
 
@@ -315,7 +231,7 @@ describe('acceptance', function() {
                         appTypePath + '/schema.sql',
                         'CREATE TABLE app_type (\n' +
                         '    id SERIAL PRIMARY KEY,\n' +
-                        '    name character varying(255),\n' +
+                        '    name character varying(255)\n' +
                         ');\n'
                     );
 
@@ -344,8 +260,8 @@ describe('acceptance', function() {
     ['postgres', 'mysql'].forEach(function(dialect) {
         describe(`seedCmd ${dialect}`, function() {
             before(function() {
-                return this.initMigEnv('1.1.0').bind(this).then(function() {
-                    return this.createMigrationDevDbFiles(this.mig, this.tmpDir.name);
+                return testUtils.initMigEnv.call(this, '1.1.0').bind(this).then(function() {
+                    return testUtils.createMigrationDevDbFiles.call(this, this.mig, this.tmpDir.name);
                 }).then(function() {
                     this.sequelizeMock = {
                         options: {dialect: dialect},
@@ -432,7 +348,7 @@ describe('acceptance', function() {
             ];
 
             before(function() {
-                return this.initMigEnv('1.1.0').bind(this).then(function() {
+                return testUtils.initMigEnv.call(this, '1.1.0').bind(this).then(function() {
                     return utils.initFS(this.tmpDir.name, 'migrations');
                 }).then(function() {
                     const mig = this.mig;
@@ -645,7 +561,7 @@ describe('acceptance', function() {
 
         describe('', function() {
             before(function() {
-                return this.initMigEnv('1.1.0').bind(this).then(function() {
+                return testUtils.initMigEnv.call(this, '1.1.0').bind(this).then(function() {
                     const mig = this.mig;
                     const tmpDir = this.tmpDir;
 
@@ -694,7 +610,7 @@ describe('acceptance', function() {
     describe('migrationStatusCmd', function() {
         before(function() {
 
-            return this.initMigEnv('1.0.0').bind(this).then(function() {
+            return testUtils.initMigEnv.call(this, '1.0.0').bind(this).then(function() {
                 return utils.initFS(this.tmpDir.name, 'migrations');
             }).then(function() {
                 const mig = this.mig;
@@ -895,7 +811,7 @@ describe('acceptance', function() {
 
     describe('no git repository', function() {
         before(function() {
-            return this.initMigEnv('1.1.0', {
+            return testUtils.initMigEnv.call(this, '1.1.0', {
                 git: false
             });
         });

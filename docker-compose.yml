@@ -1,0 +1,44 @@
+version: '3.4'
+x-env: &x-env
+  POSTGRES_DB         : ${POSTGRES_DB:-test}
+  POSTGRES_USER       : ${POSTGRES_USER:-postgres}
+  POSTGRES_PASSWORD   : ${POSTGRES_PASSWORD:-empty}
+  POSTGRES_HOST       : ${POSTGRES_HOST:-postgres}
+  MYSQL_ROOT_PASSWORD : ${MYSQL_ROOT_PASSWORD:-empty}
+  MYSQL_USER          : ${MYSQL_USER:-test}
+  MYSQL_PASSWORD      : ${MYSQL_PASSWORD:-empty}
+  MYSQL_DATABASE      : ${MYSQL_DATABASE:-test}
+services:
+  test:
+    build: .
+    environment:
+      <<: *x-env
+      NODE_ENV: ${NODE_ENV:-test}
+      DEBUG:
+    volumes:
+      - /app/node_modules
+      - type: bind
+        source: .
+        target: /app
+    depends_on:
+      - postgres
+      - mysql
+    command:
+      >
+       /wait-for-it.sh postgres:5432 --
+       /wait-for-it.sh mysql:3306 -- /bin/sh -c
+       'git config --global user.email "test@test.test"
+       && git config --global user.name "test"
+       && npm test'
+  postgres:
+    image: "postgres:9.4-alpine"
+    ports:
+      - "5432"
+    environment:
+      <<: *x-env
+  mysql:
+    image: "mysql:8"
+    ports:
+      - "3306"
+    environment:
+      <<: *x-env

@@ -1,13 +1,3 @@
-DELIMITER $$
-DROP PROCEDURE IF EXISTS {{{migName}}} $$
-
-CREATE PROCEDURE {{{migName}}}()
-BEGIN
-    DECLARE EXIT HANDLER FOR SQLEXCEPTION
-    BEGIN
-        ROLLBACK;
-        RESIGNAL;
-    END;
     {{#schema}}
     -- SCHEMA CHANGES
     -- DDL is not transactional and causes implicit COMMIT;
@@ -21,8 +11,3 @@ BEGIN
 {{#prettyPrint}}{{{seed}}}{{/prettyPrint}}
     COMMIT;
     {{/seed}}
-END $$
-
-CALL {{{migName}}}() $$
-DROP PROCEDURE IF EXISTS {{{migName}}} $$
-DELIMITER ;

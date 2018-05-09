@@ -28,7 +28,8 @@
   "scripts": {
     "coverage": "./node_modules/istanbul/lib/cli.js cover ./node_modules/mocha/bin/_mocha -- --ui bdd -R spec -t 5000 'tests/**/*.js'",
     "tests": "mocha --ui bdd --colors --check-leaks -t 5000 --reporter spec 'tests/**/*.js'",
-    "test": "npm run tests"
+    "test": "npm run tests",
+    "test:docker": "./tests/docker-compose-run.sh"
   },
   "dependencies": {
     "bi-config": ">=2.0.0-alpha",
@@ -47,6 +48,8 @@
     "mocha": "^3.5.3",
     "mysql": "^2.15.0",
     "pg": "^4.5.0",
+    "pg-hstore": "2.3.*",
+    "pg-native": "^1.10.1",
     "sinon": "^1.17.3",
     "sinon-as-promised": "^4.0.0",
     "sinon-chai": "^2.8.0",

@@ -1,4 +1,4 @@
 CREATE TABLE app_type (
     id SERIAL PRIMARY KEY,
-    name character varying(255),
+    name character varying(255)
 );
